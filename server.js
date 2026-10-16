@@ -46,6 +46,30 @@ const io = new Server(server, {
 });
 
 app.disable('x-powered-by');
+
+// Permite que a interface publicada no Netlify use a API hospedada no Render.
+// Se o domínio do frontend mudar, atualize FRONTEND_ORIGIN.
+const FRONTEND_ORIGIN =
+  process.env.FRONTEND_ORIGIN || 'https://blockworldss.netlify.app';
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (origin === FRONTEND_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(origin === FRONTEND_ORIGIN ? 204 : 403);
+  }
+
+  next();
+});
+
 app.use(express.json({ limit: '3mb' }));
 
 // Diagnóstico: confirma que os pedidos de autenticação chegam ao servidor.
@@ -132,7 +156,7 @@ function setSession(res, user) {
 
   res.setHeader(
     'Set-Cookie',
-    `bw_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${secure}`
+    `bw_session=${token}; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}`
   );
 }
 
@@ -143,7 +167,7 @@ function clearSession(req, res) {
 
   res.setHeader(
     'Set-Cookie',
-    'bw_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'
+    'bw_session=; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=0'
   );
 }
 
@@ -256,6 +280,9 @@ app.post('/api/logout', (req, res) => {
 console.log(
   '[AUTH API] Rotas registradas: POST /api/login e POST /api/register'
 );
+
+console.log(`[AUTH API] Origem permitida do frontend: ${FRONTEND_ORIGIN}`);
+console.log('[AUTH API] Use a URL do Render nas chamadas fetch da interface Netlify.');
 
 app.get('/api/games', (req, res) => {
   const publicados = games.filter(g => g.published).map(g => ({
@@ -581,7 +608,9 @@ app.get('/api/scenes/:id', (req, res) => {
       error: 'Os dados deste jogo não foram encontrados.'
     });
   }
-});app.get('/play/:id', (req, res) => {
+});
+
+app.get('/play/:id', (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
     return res.status(400).send('ID inválido.');
   }
@@ -910,7 +939,9 @@ io.on('connection', socket => {
       Math.max(0, io.engine.clientsCount - 1)
     );
   });
-});// Limpa sessões expiradas e salas antigas vazias.
+});
+
+// Limpa sessões expiradas e salas antigas vazias.
 setInterval(() => {
   const now = Date.now();
 
