@@ -1,5 +1,4 @@
 'use strict';
-
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -15,862 +14,242 @@ const PLATFORM_DIR = path.join(ROOT, 'platform');
 const DATA_DIR = path.join(ROOT, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const GAMES_FILE = path.join(DATA_DIR, 'games.json');
-
+const SHOP_FILE = path.join(DATA_DIR, 'shop.json');
+const SHOP_AUDIT_FILE = path.join(DATA_DIR, 'shop-audit.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
-
-function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(file, data) {
-  const temp = file + '.tmp';
-  fs.writeFileSync(
-    temp,
-    JSON.stringify(data, null, 2),
-    { mode: 0o600 }
-  );
-  fs.renameSync(temp, file);
-}
-
+function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
+function writeJson(file, data) { const temp = file + '.tmp'; fs.writeFileSync(temp, JSON.stringify(data, null, 2), { mode: 0o600 }); fs.renameSync(temp, file); }
 let users = readJson(USERS_FILE, []);
 let games = readJson(GAMES_FILE, []);
-
-const sessions = new Map();
+const defaultShopItems = [
+  { id: 'bw-cap-blue', name: 'Boné Azul BlockWorld', category: 'Chapéus', description: 'Boné cosmético azul para perfis compatíveis.', icon: '🧢', price: 0, kind: 'cosmetic', enabled: true },
+  { id: 'bw-glasses-neon', name: 'Óculos Neon', category: 'Acessórios', description: 'Óculos brilhantes de estilo futurista.', icon: '🕶️', price: 250, kind: 'cosmetic', enabled: true },
+  { id: 'bw-hoodie-cyan', name: 'Moletom Ciano', category: 'Roupas', description: 'Visual exclusivo da BlockWorld.', icon: '🧥', price: 400, kind: 'clothing', enabled: true },
+  { id: 'bw-trail-spark', name: 'Rastro de Faíscas', category: 'Efeitos', description: 'Efeito visual para jogos que implementarem este item.', icon: '✨', price: 600, kind: 'game-item', enabled: true },
+  { id: 'bw-tool-builder', name: 'Ferramenta Construtora', category: 'Gears', description: 'Item de jogo demonstrativo; requer suporte no jogo para funcionar.', icon: '🛠️', price: 800, kind: 'game-item', enabled: true },
+  { id: 'bw-pants-urban', name: 'Calça Urbana', category: 'Calças', description: 'Peça cosmética para avatares compatíveis.', icon: '👖', price: 300, kind: 'clothing', enabled: true }
+];
+let shopItems = readJson(SHOP_FILE, null);
+if (!Array.isArray(shopItems)) { shopItems = defaultShopItems; writeJson(SHOP_FILE, shopItems); }
+let shopAudit = readJson(SHOP_AUDIT_FILE, []);
+// Migração simples de contas antigas para a carteira e inventário da loja.
+let usersChanged = false;
+for (const u of users) {
+  if (!Number.isSafeInteger(u.coins) || u.coins < 0) { u.coins = 1250; usersChanged = true; }
+  if (!Array.isArray(u.shopInventory)) { u.shopInventory = []; usersChanged = true; }
+  if (!Array.isArray(u.equippedShopItems)) { u.equippedShopItems = []; usersChanged = true; }
+}
+if (usersChanged) writeJson(USERS_FILE, users);
+const sessions = new Map(); // session tokens are random; cookies are HttpOnly.
 const rooms = new Map();
-
 const app = express();
 const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: { origin: false },
-  maxHttpBufferSize: 1e5,
-  pingInterval: 25000,
-  pingTimeout: 20000
-});
-
+const allowedOrigins = String(process.env.FRONTEND_ORIGINS || 'https://blockworldm.netlify.app').split(',').map(v => v.trim()).filter(Boolean);
+const io = new Server(server, { cors: { origin: allowedOrigins, credentials: true }, maxHttpBufferSize: 1e5, pingInterval: 25000, pingTimeout: 20000 });
 app.disable('x-powered-by');
-
-// Domínios autorizados para acessar a API.
-const FRONTEND_ORIGIN =
-  process.env.FRONTEND_ORIGIN ||
-  'https://blockworldm.netlify.app';
-
-const FRONTEND_ORIGINS = new Set([
-  FRONTEND_ORIGIN,
-  'https://blockworldm.netlify.app',
-  'https://blockworldss.netlify.app'
-]);
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (FRONTEND_ORIGINS.has(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Vary', 'Origin');
-    res.setHeader(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-    );
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization'
-    );
-  }
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(
-      FRONTEND_ORIGINS.has(origin) ? 204 : 403
-    );
-  }
-
-  next();
-});
-
 app.use(express.json({ limit: '3mb' }));
-
-app.use((req, res, next) => {
-  if (
-    req.path === '/api/login' ||
-    req.path === '/api/register'
-  ) {
-    console.log(`[AUTH API] ${req.method} ${req.path}`);
-  }
-
-  next();
-});
-
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader(
-    'Referrer-Policy',
-    'strict-origin-when-cross-origin'
-  );
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  next();
-});
-
-app.use(express.static(PLATFORM_DIR, {
-  extensions: ['html'],
-  index: 'index.html'
-}));
-
-function cookieValue(req, key) {
-  const raw = req.headers.cookie || '';
-
-  for (const part of raw.split(';')) {
-    const i = part.indexOf('=');
-
-    if (i > -1 && part.slice(0, i).trim() === key) {
-      return decodeURIComponent(part.slice(i + 1).trim());
-    }
-  }
-
-  return '';
+app.use((req, res, next) => { const origin = req.headers.origin; if (origin && allowedOrigins.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Access-Control-Allow-Credentials', 'true'); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS'); } if (req.method === 'OPTIONS') return res.sendStatus(204); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); res.setHeader('X-Frame-Options', 'SAMEORIGIN'); next(); });
+app.use(express.static(PLATFORM_DIR, { extensions: ['html'], index: 'index.html' }));
+function cookieValue(req, key) { const raw = req.headers.cookie || ''; for (const part of raw.split(';')) { const i = part.indexOf('='); if (i > -1 && part.slice(0, i).trim() === key) return decodeURIComponent(part.slice(i + 1).trim()); } return ''; }
+function currentUser(req) { const token = cookieValue(req, 'bw_session'); const session = sessions.get(token); if (!session || session.expires < Date.now()) { if (token) sessions.delete(token); return null; } return users.find(u => u.id === session.userId) || null; }
+function isAdminUser(u) { const configured = String(process.env.ADMIN_USERNAME || '').trim(); return Boolean(configured && u && u.username.toLowerCase() === configured.toLowerCase()); }
+function publicUser(u) { return { id: u.id, username: u.username, coins: Number.isSafeInteger(u.coins) && u.coins >= 0 ? u.coins : 0, isAdmin: isAdminUser(u) }; }
+function requireAdmin(req, res, next) { if (!req.user || !isAdminUser(req.user)) return res.status(403).json({ error: 'Apenas a conta administradora pode fazer isso.' }); next(); }
+function safeShopItem(item) { return { id: item.id, name: item.name, category: item.category, description: item.description, icon: item.icon, price: item.price, kind: item.kind, enabled: item.enabled !== false }; }
+function validShopItem(body) {
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  const category = typeof body?.category === 'string' ? body.category.trim() : '';
+  const description = typeof body?.description === 'string' ? body.description.trim() : '';
+  const icon = typeof body?.icon === 'string' ? body.icon.trim() : '🎁';
+  const price = body?.price;
+  const kind = typeof body?.kind === 'string' ? body.kind : 'cosmetic';
+  if (name.length < 2 || name.length > 60 || category.length < 2 || category.length > 30 || description.length > 240) return null;
+  if (!Number.isSafeInteger(price) || price < 0 || price > 100000000) return null;
+  if (!['cosmetic', 'clothing', 'game-item', 'gear', 'effect'].includes(kind)) return null;
+  if (icon.length > 8) return null;
+  return { name, category, description, icon: icon || '🎁', price, kind };
 }
+function requireUser(req, res, next) { const user = currentUser(req); if (!user) return res.status(401).json({ error: 'Entre na sua conta para continuar.' }); req.user = user; next(); }
 
-function currentUser(req) {
-  const token = cookieValue(req, 'bw_session');
-  const session = sessions.get(token);
+registerSocialRoutes({ app, requireUser, users, writeJson, dataDir: DATA_DIR, usersFile: USERS_FILE });
 
-  if (!session || session.expires < Date.now()) {
-    if (token) sessions.delete(token);
-    return null;
-  }
-
-  return users.find(u => u.id === session.userId) || null;
-}
-
-function publicUser(user) {
-  return {
-    id: user.id,
-    username: user.username
-  };
-}
-
-function requireUser(req, res, next) {
-  const user = currentUser(req);
-
-  if (!user) {
-    return res.status(401).json({
-      error: 'Entre na sua conta para continuar.'
-    });
-  }
-
-  req.user = user;
-  next();
-}
-
-// Mantém as rotas da comunidade.
-registerSocialRoutes({
-  app,
-  requireUser,
-  users,
-  writeJson,
-  dataDir: DATA_DIR,
-  usersFile: USERS_FILE
-});
-
-function setSession(res, user) {
-  const token = crypto.randomBytes(32).toString('hex');
-
-  sessions.set(token, {
-    userId: user.id,
-    expires: Date.now() + 7 * 24 * 60 * 60 * 1000
-  });
-
-  res.setHeader(
-    'Set-Cookie',
-    `bw_session=${token}; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}`
-  );
-}
-
-function clearSession(req, res) {
-  const token = cookieValue(req, 'bw_session');
-
-  if (token) sessions.delete(token);
-
-  res.setHeader(
-    'Set-Cookie',
-    'bw_session=; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=0'
-  );
-}
-
-function hashPassword(
-  password,
-  salt = crypto.randomBytes(16).toString('hex')
-) {
-  const hash = crypto.scryptSync(
-    password,
-    salt,
-    64
-  ).toString('hex');
-
-  return { salt, hash };
-}
-
-function validUsername(name) {
-  return typeof name === 'string' &&
-    /^[\p{L}\p{N}_-]{3,24}$/u.test(name);
-}
-
-app.get('/api/status', (req, res) => {
-  res.json({
-    online: true,
-    jogadores: io.engine.clientsCount,
-    jogos: games.length
-  });
-});
-
-app.get('/api/me', (req, res) => {
-  const user = currentUser(req);
-
-  res.json({
-    user: user ? publicUser(user) : null
-  });
-});
-
+function setSession(res, user) { const token = crypto.randomBytes(32).toString('hex'); sessions.set(token, { userId: user.id, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 }); const production = process.env.NODE_ENV === 'production'; const secure = production ? '; Secure' : ''; const sameSite = production ? 'None' : 'Lax'; res.setHeader('Set-Cookie', `bw_session=${token}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${7 * 24 * 60 * 60}${secure}`); }
+function clearSession(req, res) { const token = cookieValue(req, 'bw_session'); if (token) sessions.delete(token); const production = process.env.NODE_ENV === 'production'; res.setHeader('Set-Cookie', `bw_session=; HttpOnly; SameSite=${production ? 'None' : 'Lax'}; Path=/; Max-Age=0${production ? '; Secure' : ''}`); }
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) { const hash = crypto.scryptSync(password, salt, 64).toString('hex'); return { salt, hash }; }
+function validUsername(name) { return typeof name === 'string' && /^[\p{L}\p{N}_-]{3,24}$/u.test(name); }
+app.get('/api/status', (req, res) => res.json({ online: true, jogadores: io.engine.clientsCount, jogos: games.length }));
+app.get('/api/me', (req, res) => { const user = currentUser(req); res.json({ user: user ? publicUser(user) : null }); });
 app.post('/api/register', (req, res) => {
-  const username = String(
-    req.body?.username || ''
-  ).trim();
-
-  const password = req.body?.password;
-
-  if (!validUsername(username)) {
-    return res.status(400).json({
-      error:
-        'O nome deve ter 3 a 24 caracteres: letras, números, _ ou -.'
-    });
-  }
-
-  if (
-    typeof password !== 'string' ||
-    password.length < 8 ||
-    password.length > 128
-  ) {
-    return res.status(400).json({
-      error: 'A senha deve ter entre 8 e 128 caracteres.'
-    });
-  }
-
-  if (
-    users.some(
-      user =>
-        user.username.toLowerCase() ===
-        username.toLowerCase()
-    )
-  ) {
-    return res.status(409).json({
-      error: 'Esse nome de usuário já está em uso.'
-    });
-  }
-
-  const credentials = hashPassword(password);
-
-  const user = {
-    id: crypto.randomUUID(),
-    username,
-    salt: credentials.salt,
-    passwordHash: credentials.hash,
-    createdAt: Date.now()
-  };
-
-  users.push(user);
-  writeJson(USERS_FILE, users);
-  setSession(res, user);
-
-  res.status(201).json({
-    user: publicUser(user)
-  });
+  const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+  if (!validUsername(username)) return res.status(400).json({ error: 'O nome deve ter 3â€“24 caracteres: letras, nÃºmeros, _ ou -.' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'A senha deve ter entre 8 e 128 caracteres.' });
+  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Esse nome de usuÃ¡rio jÃ¡ estÃ¡ em uso.' });
+  const credentials = hashPassword(password); const user = { id: crypto.randomUUID(), username, salt: credentials.salt, passwordHash: credentials.hash, createdAt: Date.now(), coins: 1250, shopInventory: [], equippedShopItems: [] };
+  users.push(user); writeJson(USERS_FILE, users); setSession(res, user); res.status(201).json({ user: publicUser(user) });
 });
-
 app.post('/api/login', (req, res) => {
-  const username = String(
-    req.body?.username || ''
-  ).trim();
-
-  const password = req.body?.password;
-
-  const user = users.find(
-    item =>
-      item.username.toLowerCase() ===
-      username.toLowerCase()
-  );
-
-  if (
-    !user ||
-    typeof password !== 'string' ||
-    password.length > 128
-  ) {
-    return res.status(401).json({
-      error: 'Nome de usuário ou senha incorretos.'
-    });
-  }
-
-  const hash = crypto.scryptSync(
-    password,
-    user.salt,
-    64
-  ).toString('hex');
-
-  const a = Buffer.from(hash, 'hex');
-  const b = Buffer.from(user.passwordHash, 'hex');
-
-  if (
-    a.length !== b.length ||
-    !crypto.timingSafeEqual(a, b)
-  ) {
-    return res.status(401).json({
-      error: 'Nome de usuário ou senha incorretos.'
-    });
-  }
-
-  setSession(res, user);
-
-  res.json({
-    user: publicUser(user)
-  });
+  const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user || typeof password !== 'string' || password.length > 128) return res.status(401).json({ error: 'Nome de usuÃ¡rio ou senha incorretos.' });
+  const hash = crypto.scryptSync(password, user.salt, 64).toString('hex'); const a = Buffer.from(hash, 'hex'); const b = Buffer.from(user.passwordHash, 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Nome de usuÃ¡rio ou senha incorretos.' });
+  setSession(res, user); res.json({ user: publicUser(user) });
 });
+app.post('/api/logout', (req, res) => { clearSession(req, res); res.json({ ok: true }); });
 
-app.post('/api/logout', (req, res) => {
-  clearSession(req, res);
-  res.json({ ok: true });
-});console.log(
-  '[AUTH API] Rotas registradas: POST /api/login e POST /api/register'
-);
-
-console.log(
-  `[AUTH API] Origens permitidas do frontend: ${[...FRONTEND_ORIGINS].join(', ')}`
-);
-
-console.log(
-  '[AUTH API] Use a URL do Render nas chamadas fetch da interface Netlify.'
-);
+// ===== LOJA BLOCKWORLD: carteira, compras e inventário validados no servidor =====
+app.get('/api/shop/items', (req, res) => res.json({ items: shopItems.filter(i => i.enabled !== false).map(safeShopItem) }));
+app.get('/api/shop/inventory', requireUser, (req, res) => {
+  const user = req.user;
+  res.json({ coins: Number.isSafeInteger(user.coins) ? user.coins : 0, inventory: (user.shopInventory || []).map(id => shopItems.find(i => i.id === id)).filter(Boolean).map(safeShopItem), equipped: user.equippedShopItems || [] });
+});
+app.post('/api/shop/buy', requireUser, (req, res) => {
+  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : '';
+  const item = shopItems.find(i => i.id === itemId && i.enabled !== false);
+  if (!item) return res.status(404).json({ error: 'Esse item não está disponível.' });
+  const user = req.user;
+  if (!Array.isArray(user.shopInventory)) user.shopInventory = [];
+  if (user.shopInventory.includes(item.id)) return res.status(409).json({ error: 'Você já possui esse item.' });
+  const price = Number.isSafeInteger(item.price) && item.price >= 0 ? item.price : 0;
+  const balance = Number.isSafeInteger(user.coins) && user.coins >= 0 ? user.coins : 0;
+  if (balance < price) return res.status(400).json({ error: 'Você não tem moedas suficientes.', coins: balance });
+  user.coins = balance - price;
+  user.shopInventory.push(item.id);
+  try {
+    writeJson(USERS_FILE, users);
+    shopAudit.push({ id: crypto.randomUUID(), action: 'purchase', username: user.username, itemId: item.id, price, at: Date.now() });
+    if (shopAudit.length > 5000) shopAudit = shopAudit.slice(-5000);
+    writeJson(SHOP_AUDIT_FILE, shopAudit);
+    res.json({ ok: true, message: price === 0 ? 'Item gratuito adicionado ao inventário!' : 'Compra concluída!', coins: user.coins, item: safeShopItem(item) });
+  } catch (err) { user.coins = balance; user.shopInventory = user.shopInventory.filter(id => id !== item.id); console.error('[SHOP] Falha ao salvar compra:', err); res.status(500).json({ error: 'Não foi possível salvar a compra. Tente novamente.' }); }
+});
+app.post('/api/shop/equip', requireUser, (req, res) => {
+  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : '';
+  const item = shopItems.find(i => i.id === itemId);
+  if (!item || !(req.user.shopInventory || []).includes(itemId)) return res.status(403).json({ error: 'Você precisa possuir esse item para equipá-lo.' });
+  if (!Array.isArray(req.user.equippedShopItems)) req.user.equippedShopItems = [];
+  if (req.body?.equipped === false) req.user.equippedShopItems = req.user.equippedShopItems.filter(id => id !== itemId);
+  else if (!req.user.equippedShopItems.includes(itemId)) req.user.equippedShopItems.push(itemId);
+  writeJson(USERS_FILE, users);
+  res.json({ ok: true, equipped: req.user.equippedShopItems, message: 'Inventário atualizado.' });
+});
+app.get('/api/admin/shop/items', requireUser, requireAdmin, (req, res) => res.json({ items: shopItems.map(safeShopItem), recentActions: shopAudit.slice(-100).reverse() }));
+app.post('/api/admin/shop/items', requireUser, requireAdmin, (req, res) => {
+  const parsed = validShopItem(req.body);
+  if (!parsed) return res.status(400).json({ error: 'Dados inválidos. Confira nome, categoria, ícone e preço inteiro (0 ou mais).' });
+  const id = 'bw-' + crypto.randomBytes(8).toString('hex');
+  const item = { id, ...parsed, enabled: true, createdAt: Date.now(), createdBy: req.user.username };
+  shopItems.unshift(item); writeJson(SHOP_FILE, shopItems);
+  shopAudit.push({ id: crypto.randomUUID(), action: 'create-item', username: req.user.username, itemId: id, at: Date.now() }); writeJson(SHOP_AUDIT_FILE, shopAudit);
+  res.status(201).json({ ok: true, item: safeShopItem(item) });
+});
+app.patch('/api/admin/shop/items/:id', requireUser, requireAdmin, (req, res) => {
+  const item = shopItems.find(i => i.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item não encontrado.' });
+  if (req.body?.enabled !== undefined) { if (typeof req.body.enabled !== 'boolean') return res.status(400).json({ error: 'enabled precisa ser booleano.' }); item.enabled = req.body.enabled; }
+  if (req.body?.price !== undefined) { if (!Number.isSafeInteger(req.body.price) || req.body.price < 0 || req.body.price > 100000000) return res.status(400).json({ error: 'Preço inválido.' }); item.price = req.body.price; }
+  writeJson(SHOP_FILE, shopItems); shopAudit.push({ id: crypto.randomUUID(), action: 'update-item', username: req.user.username, itemId: item.id, at: Date.now() }); writeJson(SHOP_AUDIT_FILE, shopAudit);
+  res.json({ ok: true, item: safeShopItem(item) });
+});
+app.get('/api/admin/shop/audit', requireUser, requireAdmin, (req, res) => res.json({ actions: shopAudit.slice(-200).reverse() }));
 
 app.get('/api/games', (req, res) => {
-  const publicados = games
-    .filter(g => g.published)
-    .map(g => ({
-      id: g.id,
-      title: g.title,
-      description: g.description,
-      category: g.category,
-      url: g.url,
-      creator: g.creator,
-      createdAt: g.createdAt,
-      icon: g.icon,
-      visits:
-        Number.isSafeInteger(g.visits) && g.visits >= 0
-          ? g.visits
-          : 0
-    }));
-
+  const publicados = games.filter(g => g.published).map(g => ({
+    id: g.id,
+    title: g.title,
+    description: g.description,
+    category: g.category,
+    url: g.url,
+    creator: g.creator,
+    createdAt: g.createdAt,
+    icon: g.icon,
+    visits: Number.isSafeInteger(g.visits) && g.visits >= 0 ? g.visits : 0
+  }));
   res.json({ games: publicados });
 });
-
 app.post('/api/games/:id/visit', (req, res) => {
-  const game = games.find(
-    g => g.id === req.params.id && g.published
-  );
-
-  if (!game) {
-    return res.status(404).json({
-      error: 'Jogo não encontrado.'
-    });
-  }
-
-  game.visits =
-    Number.isSafeInteger(game.visits) && game.visits >= 0
-      ? game.visits
-      : 0;
-
+  const game = games.find(g => g.id === req.params.id && g.published);
+  if (!game) return res.status(404).json({ error: 'Jogo não encontrado.' });
+  game.visits = Number.isSafeInteger(game.visits) && game.visits >= 0 ? game.visits : 0;
   game.visits += 1;
-
   try {
     writeJson(GAMES_FILE, games);
-
-    res.json({
-      ok: true,
-      visits: game.visits
-    });
+    res.json({ ok: true, visits: game.visits });
   } catch (error) {
     game.visits -= 1;
-
     console.error('[VISITAS] Falha ao salvar:', error);
-
-    res.status(500).json({
-      error: 'Não foi possível salvar a visita.'
-    });
+    res.status(500).json({ error: 'Não foi possível salvar a visita.' });
   }
 });
-
 app.post('/api/games', requireUser, (req, res) => {
-  const title =
-    typeof req.body?.title === 'string'
-      ? req.body.title.trim()
-      : '';
-
-  const description =
-    typeof req.body?.description === 'string'
-      ? req.body.description.trim()
-      : '';
-
-  const category =
-    typeof req.body?.category === 'string'
-      ? req.body.category.trim()
-      : 'Outro';
-
-  const url =
-    typeof req.body?.url === 'string'
-      ? req.body.url.trim()
-      : '';
-
-  if (title.length < 2 || title.length > 60) {
-    return res.status(400).json({
-      error: 'O título precisa ter de 2 a 60 caracteres.'
-    });
-  }
-
-  if (
-    description.length < 5 ||
-    description.length > 500
-  ) {
-    return res.status(400).json({
-      error: 'A descrição precisa ter de 5 a 500 caracteres.'
-    });
-  }
-
-  if (
-    url &&
-    (
-      !/^https:\/\//i.test(url) ||
-      url.length > 500 ||
-      !validHttpsUrl(url)
-    )
-  ) {
-    return res.status(400).json({
-      error: 'Use um link HTTPS válido para o jogo.'
-    });
-  }
-
-  if (
-    games.filter(g => g.creatorId === req.user.id).length >= 30
-  ) {
-    return res.status(429).json({
-      error: 'Você atingiu o limite de 30 publicações nesta versão.'
-    });
-  }
-
-  const game = {
-    id: crypto.randomUUID(),
-    title,
-    description,
-    category: [
-      'Aventura',
-      'Construção',
-      'Corrida',
-      'Obby',
-      'Simulação',
-      'Outro'
-    ].includes(category)
-      ? category
-      : 'Outro',
-    url,
-    creatorId: req.user.id,
-    creator: req.user.username,
-    createdAt: Date.now(),
-    published: true,
-    icon: '🎮'
-  };
-
-  games.unshift(game);
-  writeJson(GAMES_FILE, games);
-
-  res.status(201).json({
-    game: {
-      id: game.id,
-      title: game.title,
-      description: game.description,
-      category: game.category,
-      url: game.url,
-      creator: game.creator,
-      createdAt: game.createdAt,
-      icon: game.icon
-    }
-  });
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : ''; const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''; const category = typeof req.body?.category === 'string' ? req.body.category.trim() : 'Outro'; const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  if (title.length < 2 || title.length > 60) return res.status(400).json({ error: 'O tÃ­tulo precisa ter de 2 a 60 caracteres.' });
+  if (description.length < 5 || description.length > 500) return res.status(400).json({ error: 'A descriÃ§Ã£o precisa ter de 5 a 500 caracteres.' });
+  if (url && (!/^https:\/\//i.test(url) || url.length > 500 || !validHttpsUrl(url))) return res.status(400).json({ error: 'Use um link HTTPS vÃ¡lido para o jogo.' });
+  if (games.filter(g => g.creatorId === req.user.id).length >= 30) return res.status(429).json({ error: 'VocÃª atingiu o limite de 30 publicaÃ§Ãµes nesta versÃ£o.' });
+  const game = { id: crypto.randomUUID(), title, description, category: ['Aventura','ConstruÃ§Ã£o','Corrida','Obby','SimulaÃ§Ã£o','Outro'].includes(category) ? category : 'Outro', url, creatorId: req.user.id, creator: req.user.username, createdAt: Date.now(), published: true, icon: 'ðŸŽ®' };
+  games.unshift(game); writeJson(GAMES_FILE, games); res.status(201).json({ game: { id: game.id, title: game.title, description: game.description, category: game.category, url: game.url, creator: game.creator, createdAt: game.createdAt, icon: game.icon } });
 });
-
-function validHttpsUrl(value) {
-  try {
-    const url = new URL(value);
-
-    return (
-      url.protocol === 'https:' &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
-}
-
-app.delete('/api/games/:id', requireUser, (req, res) => {
-  const game = games.find(g => g.id === req.params.id);
-
-  if (!game) {
-    return res.status(404).json({
-      error: 'Jogo não encontrado.'
-    });
-  }
-
-  if (game.creatorId !== req.user.id) {
-    return res.status(403).json({
-      error: 'Só o criador pode remover esta publicação.'
-    });
-  }
-
-  games = games.filter(g => g.id !== game.id);
-
-  writeJson(GAMES_FILE, games);
-
-  res.json({ ok: true });
-});
+function validHttpsUrl(value) { try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password; } catch { return false; } }
+app.delete('/api/games/:id', requireUser, (req, res) => { const game = games.find(g => g.id === req.params.id); if (!game) return res.status(404).json({ error: 'Jogo nÃ£o encontrado.' }); if (game.creatorId !== req.user.id) return res.status(403).json({ error: 'SÃ³ o criador pode remover esta publicaÃ§Ã£o.' }); games = games.filter(g => g.id !== game.id); writeJson(GAMES_FILE, games); res.json({ ok: true }); });
 
 // ===== BLOCKWORLD: PUBLICAÇÃO E EXECUÇÃO DE CENAS =====
-
 const PUBLISHED_DIR = path.join(ROOT, 'published');
-
 fs.mkdirSync(PUBLISHED_DIR, { recursive: true });
-
 function validScene(scene) {
-  if (
-    !scene ||
-    typeof scene !== 'object' ||
-    !Array.isArray(scene.objects)
-  ) {
-    return false;
-  }
-
-  if (scene.objects.length > 500) {
-    return false;
-  }
-
-  const allowed = new Set([
-    'Box',
-    'Sphere',
-    'Plane',
-    'Cylinder'
-  ]);
-
-  for (const object of scene.objects) {
-    if (
-      !object ||
-      typeof object !== 'object' ||
-      !allowed.has(object.type)
-    ) {
-      return false;
-    }
-
+  if (!scene || typeof scene !== 'object' || !Array.isArray(scene.objects)) return false;
+  if (scene.objects.length > 500) return false;
+  const allowed = new Set(['Box', 'Sphere', 'Plane', 'Cylinder']);
+  for (const o of scene.objects) {
+    if (!o || typeof o !== 'object' || !allowed.has(o.type)) return false;
     for (const key of ['position', 'rotation', 'scale']) {
-      const value = object[key];
-
-      if (
-        !Array.isArray(value) ||
-        value.length !== 3 ||
-        !value.every(n => Number.isFinite(Number(n)))
-      ) {
-        return false;
-      }
+      const v = o[key];
+      if (!Array.isArray(v) || v.length !== 3 || !v.every(n => Number.isFinite(Number(n)))) return false;
     }
-
-    if (
-      typeof object.color !== 'string' ||
-      !/^#[0-9a-fA-F]{6}$/.test(object.color)
-    ) {
-      return false;
-    }
-
-    if (
-      object.name !== undefined &&
-      (
-        typeof object.name !== 'string' ||
-        object.name.length > 80
-      )
-    ) {
-      return false;
-    }
+    if (typeof o.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(o.color)) return false;
+    if (o.name !== undefined && (typeof o.name !== 'string' || o.name.length > 80)) return false;
   }
-
   return true;
 }
-
 app.post('/api/publish-scene', requireUser, (req, res) => {
-  const title =
-    typeof req.body?.title === 'string'
-      ? req.body.title.trim()
-      : '';
-
-  const description =
-    typeof req.body?.description === 'string'
-      ? req.body.description.trim()
-      : '';
-
-  const category =
-    typeof req.body?.category === 'string'
-      ? req.body.category
-      : 'Outro';
-
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+  const category = typeof req.body?.category === 'string' ? req.body.category : 'Outro';
   const scene = req.body?.scene;
-
-  if (title.length < 2 || title.length > 60) {
-    return res.status(400).json({
-      error: 'O título deve ter de 2 a 60 caracteres.'
-    });
-  }
-
-  if (
-    description.length < 5 ||
-    description.length > 500
-  ) {
-    return res.status(400).json({
-      error: 'A descrição deve ter de 5 a 500 caracteres.'
-    });
-  }
-
-  if (!validScene(scene)) {
-    return res.status(400).json({
-      error:
-        'Cena inválida. Use o formato JSON de exemplo e no máximo 500 objetos compatíveis.'
-    });
-  }
-
-  if (
-    games.filter(g => g.creatorId === req.user.id).length >= 30
-  ) {
-    return res.status(429).json({
-      error: 'Limite de 30 publicações por conta.'
-    });
-  }
-
+  if (title.length < 2 || title.length > 60) return res.status(400).json({ error: 'O título deve ter de 2 a 60 caracteres.' });
+  if (description.length < 5 || description.length > 500) return res.status(400).json({ error: 'A descrição deve ter de 5 a 500 caracteres.' });
+  if (!validScene(scene)) return res.status(400).json({ error: 'Cena inválida. Use o formato JSON de exemplo e no máximo 500 objetos compatíveis.' });
+  if (games.filter(g => g.creatorId === req.user.id).length >= 30) return res.status(429).json({ error: 'Limite de 30 publicações por conta.' });
   const id = crypto.randomUUID();
-
-  const safeScene = {
-    version: 1,
-    objects: scene.objects.map(object => ({
-      type: object.type,
-      name: String(object.name || object.type).slice(0, 80),
-      position: object.position.map(Number),
-      rotation: object.rotation.map(Number),
-      scale: object.scale.map(
-        n => Math.max(0.05, Math.min(100, Number(n)))
-      ),
-      color: object.color
-    }))
-  };
-
-  const game = {
-    id,
-    title,
-    description,
-    category: [
-      'Aventura',
-      'Construção',
-      'Corrida',
-      'Obby',
-      'Simulação',
-      'Outro'
-    ].includes(category)
-      ? category
-      : 'Outro',
-    url: '/play/' + id,
-    creatorId: req.user.id,
-    creator: req.user.username,
-    createdAt: Date.now(),
-    published: true,
-    icon: '🎮',
-    sceneFile: id + '.json'
-  };
-
-  const scenePath = path.join(
-    PUBLISHED_DIR,
-    id + '.json'
-  );
-
-  try {
-    fs.writeFileSync(
-      scenePath,
-      JSON.stringify(safeScene),
-      {
-        flag: 'wx',
-        mode: 0o600
-      }
-    );
-
-    games.unshift(game);
-    writeJson(GAMES_FILE, games);
-  } catch (error) {
-    try {
-      fs.unlinkSync(scenePath);
-    } catch {}
-
-    return res.status(500).json({
-      error: 'Não foi possível salvar a publicação.'
-    });
-  }
-
-  res.status(201).json({
-    game: {
-      id,
-      title,
-      description,
-      category: game.category,
-      url: game.url,
-      creator: game.creator,
-      createdAt: game.createdAt,
-      icon: game.icon,
-      playUrl: game.url
-    }
-  });
+  const safeScene = { version: 1, objects: scene.objects.map(o => ({ type: o.type, name: String(o.name || o.type).slice(0,80), position: o.position.map(Number), rotation: o.rotation.map(Number), scale: o.scale.map(n => Math.max(0.05, Math.min(100, Number(n)))), color: o.color })) };
+  const game = { id, title, description, category: ['Aventura','Construção','Corrida','Obby','Simulação','Outro'].includes(category) ? category : 'Outro', url: '/play/' + id, creatorId: req.user.id, creator: req.user.username, createdAt: Date.now(), published: true, icon: '🎮', sceneFile: id + '.json' };
+  const scenePath = path.join(PUBLISHED_DIR, id + '.json');
+  try { fs.writeFileSync(scenePath, JSON.stringify(safeScene), { flag: 'wx', mode: 0o600 }); games.unshift(game); writeJson(GAMES_FILE, games); }
+  catch (e) { try { fs.unlinkSync(scenePath); } catch {} return res.status(500).json({ error: 'Não foi possível salvar a publicação.' }); }
+  res.status(201).json({ game: { id, title, description, category: game.category, url: game.url, creator: game.creator, createdAt: game.createdAt, icon: game.icon, playUrl: game.url } });
 });
-
 app.get('/api/scenes/:id', (req, res) => {
-  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
-    return res.status(400).json({
-      error: 'ID inválido.'
-    });
-  }
-
-  const game = games.find(
-    g =>
-      g.id === req.params.id &&
-      g.published &&
-      g.sceneFile
-  );
-
-  if (!game) {
-    return res.status(404).json({
-      error: 'Jogo publicado não encontrado.'
-    });
-  }
-
-  try {
-    res.setHeader('Cache-Control', 'no-store');
-
-    res.json(
-      JSON.parse(
-        fs.readFileSync(
-          path.join(PUBLISHED_DIR, game.sceneFile),
-          'utf8'
-        )
-      )
-    );
-  } catch {
-    res.status(404).json({
-      error: 'Os dados deste jogo não foram encontrados.'
-    });
-  }
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+  const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+  if (!game) return res.status(404).json({ error: 'Jogo publicado não encontrado.' });
+  try { res.setHeader('Cache-Control', 'no-store'); res.json(JSON.parse(fs.readFileSync(path.join(PUBLISHED_DIR, game.sceneFile), 'utf8'))); }
+  catch { res.status(404).json({ error: 'Os dados deste jogo não foram encontrados.' }); }
 });
-
 app.get('/play/:id', (req, res) => {
-  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) {
-    return res.status(400).send('ID inválido.');
-  }
-
-  const game = games.find(
-    g =>
-      g.id === req.params.id &&
-      g.published &&
-      g.sceneFile
-  );
-
-  if (!game) {
-    return res.status(404).send(
-      'Jogo publicado não encontrado.'
-    );
-  }
-
-  res.sendFile(
-    path.join(PLATFORM_DIR, 'play.html')
-  );
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).send('ID inválido.');
+  const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+  if (!game) return res.status(404).send('Jogo publicado não encontrado.');
+  res.sendFile(path.join(PLATFORM_DIR, 'play.html'));
 });
-
 // ===== FIM BLOCKWORLD: PUBLICAÇÃO =====
 
-// Responde JSON para qualquer rota /api inexistente.
-app.use(/^\/api(?:\/|$)/, (req, res) => {
-  console.warn(
-    `[API 404] ${req.method} ${req.originalUrl}`
-  );
 
-  res.status(404).json({
-    error: 'Rota da API não encontrada.',
-    method: req.method,
-    path: req.originalUrl
-  });
-});
+app.use('/vendor/three', express.static(path.join(ROOT, 'node_modules', 'three')));
+app.get(/.*/, (req, res) => res.sendFile(path.join(PLATFORM_DIR, 'index.html')));
 
-app.use(
-  '/vendor/three',
-  express.static(
-    path.join(ROOT, 'node_modules', 'three')
-  )
-);
-
-app.get(/.*/, (req, res) => {
-  res.sendFile(
-    path.join(PLATFORM_DIR, 'index.html')
-  );
-});function socketUser(socket) {
-  const token = socket.request.cookiesMap?.bw_session;
-  const session = sessions.get(token);
-
-  if (!session || session.expires < Date.now()) {
-    return null;
-  }
-
-  return users.find(u => u.id === session.userId) || null;
-}
-
-// Leitura do cookie de sessão para o multiplayer.
-io.use((socket, next) => {
-  const cookies = {};
-
-  for (
-    const part of String(
-      socket.request.headers.cookie || ''
-    ).split(';')
-  ) {
-    const i = part.indexOf('=');
-
-    if (i > 0) {
-      cookies[part.slice(0, i).trim()] =
-        decodeURIComponent(part.slice(i + 1).trim());
-    }
-  }
-
-  socket.request.cookiesMap = cookies;
-
-  const user = socketUser(socket);
-
-  if (!user) {
-    return next(
-      new Error('Faça login para usar o multiplayer.')
-    );
-  }
-
-  socket.user = {
-    ...publicUser(user),
-    avatar: normalizeAvatar(user.avatar)
-  };
-
-  next();
-});
-
+function socketUser(socket) { const token = socket.request.cookiesMap?.bw_session; const session = sessions.get(token); if (!session || session.expires < Date.now()) return null; return users.find(u => u.id === session.userId) || null; }
+// Socket.IO's request cookie parser is intentionally small and uses the same HttpOnly session cookie.
+io.use((socket, next) => { const cookies = {}; for (const p of String(socket.request.headers.cookie || '').split(';')) { const i = p.indexOf('='); if (i > 0) cookies[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } socket.request.cookiesMap = cookies; const user = socketUser(socket); if (!user) return next(new Error('FaÃ§a login para usar o multiplayer.')); socket.user = { ...publicUser(user), avatar: normalizeAvatar(user.avatar) }; next(); });
 const MAX_PLAYERS_PER_MATCH = 20;
 const MAX_ACTIVE_MATCHES = 500;
 
@@ -887,11 +266,10 @@ function normalizeAvatar(value) {
   for (const key of Object.keys(DEFAULT_AVATAR)) {
     const color = value && value[key];
 
-    result[key] =
-      typeof color === 'string' &&
+    result[key] = typeof color === 'string' &&
       /^#[0-9a-f]{6}$/i.test(color)
-        ? color
-        : DEFAULT_AVATAR[key];
+      ? color
+      : DEFAULT_AVATAR[key];
   }
 
   return result;
@@ -954,40 +332,29 @@ io.on('connection', socket => {
   io.emit('onlineCount', io.engine.clientsCount);
 
   socket.on('findMatch', (payload = {}) => {
-    const gameId =
-      typeof payload.gameId === 'string'
-        ? payload.gameId.slice(0, 80)
-        : '';
+    const gameId = typeof payload.gameId === 'string'
+      ? payload.gameId.slice(0, 80)
+      : '';
 
     if (!gameId) {
-      socket.emit(
-        'roomError',
-        'Identificador de jogo inválido.'
-      );
+      socket.emit('roomError', 'Identificador de jogo inválido.');
       return;
     }
 
-    const gameExists = games.some(
-      game => game && String(game.id) === gameId
+    // O ID precisa existir no catálogo de jogos carregado pelo servidor.
+    const gameExists = games.some(game =>
+      game && String(game.id) === gameId
     );
 
     if (!gameExists) {
-      socket.emit(
-        'roomError',
-        'Jogo não encontrado no catálogo.'
-      );
+      socket.emit('roomError', 'Jogo não encontrado no catálogo.');
       return;
     }
 
     const currentId = socket.data.roomCode;
-    const currentRoom = currentId
-      ? rooms.get(currentId)
-      : null;
+    const currentRoom = currentId ? rooms.get(currentId) : null;
 
-    if (
-      currentRoom &&
-      currentRoom.gameId === gameId
-    ) {
+    if (currentRoom && currentRoom.gameId === gameId) {
       sendRoomJoined(socket, currentRoom);
       return;
     }
@@ -996,10 +363,10 @@ io.on('connection', socket => {
       leaveSocketRoom(socket);
     }
 
-    let room = [...rooms.values()].find(
-      candidate =>
-        candidate.gameId === gameId &&
-        candidate.players.size < MAX_PLAYERS_PER_MATCH
+    // Procura uma partida do mesmo jogo que ainda tenha vaga.
+    let room = [...rooms.values()].find(candidate =>
+      candidate.gameId === gameId &&
+      candidate.players.size < MAX_PLAYERS_PER_MATCH
     );
 
     if (!room) {
@@ -1046,6 +413,7 @@ io.on('connection', socket => {
 
     const now = Date.now();
 
+    // Limita a frequência das atualizações de movimento.
     if (
       socket.data.lastMoveAt &&
       now - socket.data.lastMoveAt < 40
@@ -1069,7 +437,6 @@ io.on('connection', socket => {
 
     player.x = Math.max(-500, Math.min(500, x));
     player.z = Math.max(-500, Math.min(500, z));
-
     player.rotation = Math.max(
       -Math.PI * 2,
       Math.min(Math.PI * 2, rotation)
@@ -1084,8 +451,8 @@ io.on('connection', socket => {
   });
 
   socket.on('setAvatar', payload => {
-    const user = users.find(
-      entry => entry.id === socket.user.id
+    const user = users.find(entry =>
+      entry.id === socket.user.id
     );
 
     if (!user) {
@@ -1096,6 +463,7 @@ io.on('connection', socket => {
     const avatar = normalizeAvatar(payload);
 
     try {
+      // Persiste no mesmo arquivo de usuários já usado pela plataforma.
       user.avatar = avatar;
       writeJson(USERS_FILE, users);
 
@@ -1135,32 +503,7 @@ io.on('connection', socket => {
   });
 });
 
-// Limpa sessões expiradas e salas antigas vazias.
-setInterval(() => {
-  const now = Date.now();
+setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+server.listen(PORT, HOST, () => { console.log('=================================='); console.log('   BLOCKWORLD ONLINE'); console.log(`   Plataforma: http://localhost:${PORT}`); console.log('   Contas, publicaÃ§Ãµes e salas carregadas'); console.log('   Pressione Ctrl+C para encerrar'); console.log('=================================='); });
 
-  for (const [token, session] of sessions) {
-    if (session.expires < now) {
-      sessions.delete(token);
-    }
-  }
 
-  for (const [code, room] of rooms) {
-    if (
-      now - room.createdAt > 6 * 60 * 60 * 1000 &&
-      room.players.size === 0
-    ) {
-      rooms.delete(code);
-    }
-  }
-}, 60_000).unref();
-
-// Inicializa o servidor BlockWorld.
-server.listen(PORT, HOST, () => {
-  console.log('==================================');
-  console.log('   BLOCKWORLD ONLINE');
-  console.log(`   Plataforma: http://localhost:${PORT}`);
-  console.log('   Contas, publicações e salas carregadas');
-  console.log('   Pressione Ctrl+C para encerrar');
-  console.log('==================================');
-});
