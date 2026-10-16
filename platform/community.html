@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comunidade - BlockWorld</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141c30;--panel2:#1b2740;--border:#2a3955;--text:#edf3ff;--muted:#a8b6d0;--accent:#7c83ff;--green:#6ee7b7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,Segoe UI,sans-serif}
+button,input,textarea{font:inherit}
+button{border:1px solid var(--border);border-radius:9px;padding:9px 13px;background:var(--panel2);color:var(--text);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.55;cursor:wait}
+input,textarea{width:100%;padding:11px;border:1px solid var(--border);border-radius:9px;background:#0c1426;color:var(--text);margin:5px 0 12px}
+a{color:#b9c4ff}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:16px 4%;border-bottom:1px solid var(--border);background:#10182a;position:sticky;top:0;z-index:2}
+.logo{font-weight:800;font-size:21px;letter-spacing:.3px}
+header nav{display:flex;gap:8px;flex-wrap:wrap}
+main{max-width:1400px;margin:auto;padding:24px}
+.hero{padding:26px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(120deg,#202c4a,#171b39 60%,#27204a);margin-bottom:22px}
+.hero h1{font-size:clamp(26px,4vw,40px);margin:0 0 5px}
+.muted{color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:18px}
+.column{display:grid;gap:18px;align-content:start}
+.card{padding:18px;background:var(--panel);border:1px solid var(--border);border-radius:14px;min-width:0}
+.card h2{margin:0 0 12px;font-size:19px}
+.searchrow{display:flex;gap:8px}
+.searchrow input{min-width:0}
+.list{display:grid;gap:10px}
+.person{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:11px;min-width:0}
+.personinfo{flex:1;min-width:0}
+.personinfo strong{display:block;overflow-wrap:anywhere}
+.personinfo p{margin:3px 0 0;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.portrait{width:58px;height:58px;flex:0 0 58px;border:1px solid #ffffff25;border-radius:14px;background:#222b40;position:relative;overflow:hidden}
+.portrait .hair{position:absolute;top:8px;left:14px;width:30px;height:13px;border-radius:12px 12px 3px 3px;z-index:2}
+.portrait .head{position:absolute;top:13px;left:16px;width:26px;height:27px;border-radius:8px}
+.portrait .body{position:absolute;top:39px;left:10px;width:38px;height:25px;border-radius:9px 9px 0 0}
+.portrait .eye{position:absolute;top:25px;width:3px;height:3px;border-radius:50%;background:#20202a;z-index:3}
+.portrait .eye.one{left:23px}.portrait .eye.two{left:34px}
+.status{min-height:24px;color:var(--green);white-space:pre-wrap}
+.chatbox{height:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:10px;background:#0c1426;border:1px solid var(--border);border-radius:10px}
+.bubble{padding:9px 11px;border-radius:11px;background:#202d48;max-width:90%;overflow-wrap:anywhere;align-self:flex-start}
+.bubble.mine{align-self:flex-end;background:#34366e}
+.bubble small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+footer{text-align:center;padding:28px;color:var(--muted)}
+@media(max-width:850px){.layout{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}main{padding:14px}.searchrow{flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">◇ BlockWorld <span class="muted">/ Comunidade</span></div>
+  <nav>
+    <button id="homeButton" type="button">Início</button>
+    <button id="reloadButton" type="button">Atualizar</button>
+  </nav>
+</header>
+<main>
+  <section class="hero">
+    <h1>Encontre sua comunidade.</h1>
+    <p class="muted">Conheça jogadores, faça amizades e converse fora das partidas.</p>
+    <div id="welcome" class="status">Verificando sua conta...</div>
+  </section>
+
+  <div class="layout">
+    <div class="column">
+      <section class="card">
+        <h2>🔎 Encontrar jogadores</h2>
+        <form id="searchForm">
+          <div class="searchrow">
+            <input id="searchName" maxlength="24" placeholder="Digite o nome de usuário" autocomplete="off" required>
+            <button type="submit">Pesquisar</button>
+          </div>
+        </form>
+        <div id="searchResult" class="list"></div>
+      </section>
+
+      <section class="card">
+        <h2>👥 Meus amigos</h2>
+        <div id="friends" class="list">Carregando amigos...</div>
+      </section>
+
+      <section class="card">
+        <h2>✉️ Solicitações recebidas</h2>
+        <div id="incoming" class="list">Carregando solicitações...</div>
+      </section>
+
+      <section class="card">
+        <h2>📨 Solicitações enviadas</h2>
+        <div id="outgoing" class="list">Carregando solicitações...</div>
+      </section>
+    </div>
+
+    <div class="column">
+      <section class="card">
+        <h2>🪪 Meu perfil</h2>
+        <div id="myProfile" class="list">Carregando perfil...</div>
+        <label for="description">Sobre mim</label>
+        <textarea id="description" rows="3" maxlength="160" placeholder="Conte um pouco sobre você..."></textarea>
+        <button id="saveProfile" type="button">Salvar descrição</button>
+      </section>
+
+      <section class="card">
+        <h2>💬 Mensagens privadas</h2>
+        <p class="muted">As mensagens privadas estão disponíveis entre amigos.</p>
+        <label for="chatTarget">ID do amigo</label>
+        <input id="chatTarget" maxlength="80" placeholder="Escolha Conversar na lista de amigos">
+        <div id="chatMessages" class="chatbox" aria-live="polite">Escolha um amigo para abrir a conversa.</div>
+        <form id="messageForm">
+          <label for="messageText">Sua mensagem</label>
+          <textarea id="messageText" rows="3" maxlength="1000" placeholder="Escreva uma mensagem..." required></textarea>
+          <button type="submit">Enviar mensagem</button>
+          <button id="refreshChat" type="button">Atualizar conversa</button>
+        </form>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+</main>
+<footer>BlockWorld · Comunidade de jogadores</footer>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+let me = null;
+let friendsCache = [];
+
+async function api(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...options,
+    headers: {
+      ...(options.body ? {"Content-Type":"application/json"} : {}),
+      ...(options.headers || {})
+    }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || data.message || `Erro HTTP ${response.status}`);
+  return data;
+}
+function say(text) { $("status").textContent = text || ""; }
+function node(tag, text, cls) {
+  const el = document.createElement(tag);
+  if (text !== undefined) el.textContent = text;
+  if (cls) el.className = cls;
+  return el;
+}
+function btn(text, fn) {
+  const b = node("button", text);
+  b.type = "button";
+  b.addEventListener("click", fn);
+  return b;
+}
+function clear(el, text) {
+  el.replaceChildren();
+  if (text) el.appendChild(node("p", text, "muted"));
+}
+function portrait(avatar) {
+  const a = avatar && typeof avatar === "object" ? avatar : {};
+  const valid = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+  const skin = valid(a.skin) ? a.skin : "#d9a078";
+  const hair = valid(a.hair) ? a.hair : "#38251c";
+  const shirt = valid(a.shirt) ? a.shirt : "#635bdb";
+  const p = node("div", undefined, "portrait");
+  const h = node("div", undefined, "hair"); h.style.background = hair;
+  const face = node("div", undefined, "head"); face.style.background = skin;
+  const body = node("div", undefined, "body"); body.style.background = shirt;
+  p.append(h, face, node("i", undefined, "eye one"), node("i", undefined, "eye two"), body);
+  p.setAttribute("role", "img");
+  p.setAttribute("aria-label", "Avatar de jogador");
+  return p;
+}
+function personCard(profile, subtitle = "") {
+  const p = profile || {};
+  const row = node("article", undefined, "person");
+  row.appendChild(portrait(p.avatar));
+  const info = node("div", undefined, "personinfo");
+  info.appendChild(node("strong", p.username || "Jogador"));
+  info.appendChild(node("p", subtitle || p.description || "Membro da comunidade"));
+  row.appendChild(info);
+  return {row, info};
+}
+async function showProfile(name, container = $("searchResult")) {
+  clear(container, "Buscando perfil...");
+  try {
+    const data = await api("/api/social/profile/" + encodeURIComponent(name));
+    const p = data.profile;
+    if (!p) throw new Error("O servidor não retornou esse perfil.");
+    clear(container);
+    const card = personCard(p, p.description || "Este jogador ainda não escreveu uma descrição.");
+    container.appendChild(card.row);
+    if (p.id !== me?.id) {
+      card.info.appendChild(btn("Adicionar amigo", async () => {
+        try {
+          await api("/api/social/requests", {
+            method:"POST", body:JSON.stringify({username:p.username})
+          });
+          say("Solicitação enviada para " + p.username + ".");
+          await refresh();
+        } catch(e) { say(e.message); }
+      }));
+    }
+  } catch(e) { clear(container, e.message); }
+}
+async function refresh() {
+  try {
+    const [meData, friendData, requestData] = await Promise.all([
+      api("/api/me"), api("/api/social/friends"), api("/api/social/requests")
+    ]);
+    me = meData.user;
+    if (!me) throw new Error("Entre na sua conta para usar a comunidade.");
+    $("welcome").textContent = "Olá, " + me.username + "! Bem-vindo à comunidade.";
+    const own = await api("/api/social/profile/" + encodeURIComponent(me.username));
+    $("description").value = own.profile?.description || "";
+    clear($("myProfile"));
+    const mine = personCard(own.profile, "Este é o seu perfil público.");
+    $("myProfile").appendChild(mine.row);
+
+    friendsCache = Array.isArray(friendData.friends) ? friendData.friends : [];
+    clear($("friends"), friendsCache.length ? "" : "Você ainda não tem amigos.");
+    for (const p of friendsCache) {
+      const card = personCard(p);
+      const actions = node("div", undefined, "actions");
+      actions.append(
+        btn("Conversar", () => {
+          $("chatTarget").value = p.id;
+          loadMessages();
+        }),
+        btn("Ver perfil", () => showProfile(p.username)),
+        btn("Remover", async () => {
+          if (!confirm("Remover " + p.username + " dos seus amigos?")) return;
+          try {
+            await api("/api/social/friends/" + encodeURIComponent(p.id), {method:"DELETE"});
+            say("Amizade removida.");
+            await refresh();
+          } catch(e) { say(e.message); }
+        })
+      );
+      card.info.appendChild(actions);
+      $("friends").appendChild(card.row);
+    }
+
+    const incoming = Array.isArray(requestData.incoming) ? requestData.incoming : [];
+    clear($("incoming"), incoming.length ? "" : "Nenhum pedido recebido.");
+    for (const r of incoming) {
+      const card = personCard({username:r.username}, "Quer ser seu amigo.");
+      const actions = node("div", undefined, "actions");
+      actions.append(
+        btn("Aceitar", async () => {
+          try {
+            await api("/api/social/requests/" + encodeURIComponent(r.id) + "/accept", {
+              method:"POST", body:JSON.stringify({})
+            });
+            say("Pedido aceito!");
+            await refresh();
+          } catch(e) { say(e.message); }
+        }),
+        btn("Recusar", async () => {
+          try {
+            await api("/api/social/requests/" + encodeURIComponent(r.id), {method:"DELETE"});
+            say("Pedido recusado.");
+            await refresh();
+          } catch(e) { say(e.message); }
+        })
+      );
+      card.info.appendChild(actions);
+      $("incoming").appendChild(card.row);
+    }
+
+    const outgoing = Array.isArray(requestData.outgoing) ? requestData.outgoing : [];
+    clear($("outgoing"), outgoing.length ? "" : "Nenhum pedido enviado.");
+    outgoing.forEach(r => {
+      $("outgoing").appendChild(personCard({username:r.username}, "Pedido aguardando resposta.").row);
+    });
+    say("Comunidade atualizada.");
+  } catch(e) {
+    $("welcome").textContent = e.message;
+    say(e.message);
+  }
+}
+async function loadMessages() {
+  const id = $("chatTarget").value.trim();
+  if (!id) { clear($("chatMessages"), "Escolha um amigo primeiro."); return; }
+  try {
+    const data = await api("/api/social/messages/" + encodeURIComponent(id));
+    const box = $("chatMessages");
+    box.replaceChildren();
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    if (!messages.length) box.appendChild(node("p", "Nenhuma mensagem ainda.", "muted"));
+    for (const m of messages) {
+      const mine = m.from === me?.id;
+      const bubble = node("div", (mine ? "Você: " : "Amigo: ") + String(m.text || ""), "bubble" + (mine ? " mine" : ""));
+      if (m.createdAt) {
+        const time = new Date(m.createdAt);
+        bubble.appendChild(node("small", Number.isNaN(time.getTime()) ? "" : time.toLocaleString()));
+      }
+      box.appendChild(bubble);
+    }
+    box.scrollTop = box.scrollHeight;
+  } catch(e) { clear($("chatMessages"), e.message); }
+}
+$("homeButton").addEventListener("click", () => { location.href = "/"; });
+$("reloadButton").addEventListener("click", refresh);
+$("searchForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("searchName").value.trim();
+  if (name) showProfile(name);
+});
+$("saveProfile").addEventListener("click", async () => {
+  try {
+    await api("/api/social/profile", {
+      method:"PATCH",
+      body:JSON.stringify({description:$("description").value})
+    });
+    say("Descrição do perfil salva.");
+    await refresh();
+  } catch(e) { say(e.message); }
+});
+$("messageForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const id = $("chatTarget").value.trim();
+  const text = $("messageText").value.trim();
+  if (!id || !text) { say("Escolha um amigo e escreva uma mensagem."); return; }
+  try {
+    await api("/api/social/messages/" + encodeURIComponent(id), {
+      method:"POST", body:JSON.stringify({text})
+    });
+    $("messageText").value = "";
+    say("Mensagem enviada.");
+    await loadMessages();
+  } catch(e) { say(e.message); }
+});
+$("refreshChat").addEventListener("click", loadMessages);
+refresh();
+})();
+</script>
+</body>
+</html>
