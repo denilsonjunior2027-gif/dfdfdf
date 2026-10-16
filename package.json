@@ -1,0 +1,57 @@
+{
+    "name": "blockworld-studio",
+    "version": "1.0.0",
+    "description": "Editor de jogos 3D BlockWorld",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "dist:win": "electron-builder --win nsis --x64"
+    },
+    "dependencies": {
+        "fengari": "^0.1.5",
+        "three": "^0.186.1"
+    },
+    "devDependencies": {
+        "electron": "^44.7.0",
+        "electron-builder": "^26.15.3"
+    },
+    "keywords": [
+        "blockworld",
+        "game-engine",
+        "3d-editor",
+        "lua"
+    ],
+    "author": "BlockWorld",
+    "license": "MIT",
+    "build": {
+        "appId": "com.blockworld.studio",
+        "productName": "BlockWorld Studio",
+        "asar": true,
+        "directories": {
+            "output": "dist-studio"
+        },
+        "files": [
+            "main.js",
+            "index.html",
+            "renderer.js",
+            "package.json"
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ]
+        },
+        "nsis": {
+            "oneClick": false,
+            "createDesktopShortcut": true,
+            "shortcutName": "BlockWorld Studio",
+            "createStartMenuShortcut": true,
+            "allowToChangeInstallationDirectory": true
+        }
+    }
+}
