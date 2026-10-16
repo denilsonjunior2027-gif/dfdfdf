@@ -1,13 +1,333 @@
+```html
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#090914">
+  <title>Entrar | BlockWorld</title>
 
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #f5f3ff;
+      background:
+        radial-gradient(ellipse at top, #25205a 0%, transparent 55%),
+        linear-gradient(135deg, #080812, #101027 60%, #15102c);
+    }
 
-<script>
-(() => {
-  'use strict';
+    .container {
+      width: 100%;
+      max-width: 440px;
+    }
 
-  const API_URL = 'https://dfdfdf-1.onrender.com';
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
 
-  function iniciarLogin() {
+    .logo-icon {
+      display: inline-flex;
+      width: 66px;
+      height: 66px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 20px;
+      font-size: 30px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #8b5cf6, #4f46e5);
+      box-shadow: 0 8px 35px #7c3aed55;
+    }
+
+    .logo h1 {
+      margin: 14px 0 5px;
+      font-size: 30px;
+      letter-spacing: -1px;
+    }
+
+    .logo h1 span {
+      color: #a78bfa;
+    }
+
+    .logo p {
+      margin: 0;
+      color: #aaa8c5;
+      font-size: 14px;
+    }
+
+    .card {
+      padding: 30px;
+      border: 1px solid #ffffff18;
+      border-radius: 22px;
+      background: #111122eF;
+      box-shadow: 0 24px 70px #0006;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 5px;
+      margin-bottom: 28px;
+      border-radius: 12px;
+      background: #080817;
+    }
+
+    .tab {
+      padding: 12px;
+      border: 0;
+      border-radius: 9px;
+      color: #aaa8c5;
+      background: transparent;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .tab.active {
+      color: white;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 25px;
+    }
+
+    .description {
+      margin: 0 0 24px;
+      color: #aaa8c5;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      color: #e5e1ff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 14px;
+      outline: none;
+      border: 1px solid #33324e;
+      border-radius: 10px;
+      color: white;
+      background: #0b0b19;
+      font-size: 15px;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus {
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px #8b5cf622;
+    }
+
+    .field input::placeholder {
+      color: #77758f;
+    }
+
+    #confirmWrap[hidden] {
+      display: none;
+    }
+
+    .submit {
+      width: 100%;
+      padding: 15px;
+      margin-top: 5px;
+      border: 0;
+      border-radius: 11px;
+      color: white;
+      background: linear-gradient(135deg, #8b5cf6, #4f46e5);
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .submit:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .submit:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .notice {
+      display: none;
+      padding: 12px;
+      margin-top: 18px;
+      border-radius: 9px;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .notice.error,
+    .notice.success {
+      display: block;
+    }
+
+    .notice.error {
+      color: #fecaca;
+      background: #7f1d1d44;
+      border: 1px solid #ef444455;
+    }
+
+    .notice.success {
+      color: #bbf7d0;
+      background: #14532d44;
+      border: 1px solid #22c55e55;
+    }
+
+    .footer {
+      margin-top: 22px;
+      text-align: center;
+      color: #77758f;
+      font-size: 12px;
+    }
+
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      color: #c4b5fd;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .back:hover {
+      color: white;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+      }
+
+      .card {
+        padding: 23px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <header class="logo">
+      <div class="logo-icon" aria-hidden="true">B</div>
+      <h1>Block<span>World</span></h1>
+      <p>Sua próxima aventura começa aqui.</p>
+    </header>
+
+    <section class="card">
+      <div class="tabs">
+        <button
+          type="button"
+          id="loginTab"
+          class="tab active"
+        >Entrar</button>
+
+        <button
+          type="button"
+          id="registerTab"
+          class="tab"
+        >Criar conta</button>
+      </div>
+
+      <h2 id="heading">Bem-vindo de volta!</h2>
+
+      <p id="description" class="description">
+        Entre para acessar sua conta e seus jogos.
+      </p>
+
+      <form id="authForm">
+        <div class="field">
+          <label for="username">Nome de usuário</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            placeholder="Digite seu nome de usuário"
+            autocomplete="username"
+            minlength="3"
+            maxlength="30"
+            required
+          >
+        </div>
+
+        <div class="field">
+          <label for="password">Senha</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            placeholder="Digite sua senha"
+            autocomplete="current-password"
+            minlength="8"
+            maxlength="128"
+            required
+          >
+        </div>
+
+        <div class="field" id="confirmWrap" hidden>
+          <label for="confirmPassword">Confirmar senha</label>
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            placeholder="Digite a senha novamente"
+            autocomplete="new-password"
+            minlength="8"
+            maxlength="128"
+          >
+        </div>
+
+        <button class="submit" id="submitButton" type="submit">
+          Entrar na conta
+        </button>
+
+        <div
+          id="notice"
+          class="notice"
+          role="status"
+          aria-live="polite"
+        ></div>
+      </form>
+    </section>
+
+    <div style="text-align:center">
+      <a class="back" href="/">← Voltar para a BlockWorld</a>
+    </div>
+
+    <footer class="footer">
+      BlockWorld · Entre e continue sua aventura.
+    </footer>
+  </main>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const API_URL = 'https://dfdfdf-1.onrender.com';
+
     const $ = id => document.getElementById(id);
 
     const form = $('authForm');
@@ -22,259 +342,209 @@
     const heading = $('heading');
     const description = $('description');
 
-    // Não inicia se o HTML necessário não existir.
-    const elementos = {
-      authForm: form,
-      loginTab,
-      registerTab,
-      confirmWrap,
-      confirmPassword,
-      password,
-      submitButton,
-      notice,
-      username,
-      heading,
-      description
-    };
+    const requiredElements = [
+      form, loginTab, registerTab, confirmWrap,
+      confirmPassword, password, submitButton,
+      notice, username, heading, description
+    ];
 
-    const ausentes = Object.keys(elementos).filter(
-      id => !elementos[id]
-    );
-
-    if (ausentes.length) {
+    if (requiredElements.some(element => !element)) {
       console.error(
-        '[BlockWorld] HTML incompleto. Elementos ausentes:',
-        ausentes.join(', ')
-      );
-
-      console.error(
-        '[BlockWorld] Confira se este script está no login.html correto.'
+        '[BlockWorld] O formulário HTML está incompleto.'
       );
       return;
     }
 
-    let modo = 'login';
-    let enviando = false;
+    let mode = 'login';
+    let sending = false;
 
-    function mostrarAviso(mensagem, tipo = 'error') {
-      notice.textContent = mensagem;
-      notice.className = 'notice ' + tipo;
+    function showNotice(message, type = 'error') {
+      notice.textContent = message;
+      notice.className = 'notice ' + type;
     }
 
-    function definirModo(novoModo) {
-      if (enviando) return;
+    function setMode(nextMode) {
+      if (sending) return;
 
-      modo = novoModo === 'register' ? 'register' : 'login';
+      mode = nextMode === 'register' ? 'register' : 'login';
+      const registering = mode === 'register';
 
-      const cadastro = modo === 'register';
+      loginTab.classList.toggle('active', !registering);
+      registerTab.classList.toggle('active', registering);
 
-      loginTab.classList.toggle('active', !cadastro);
-      registerTab.classList.toggle('active', cadastro);
+      confirmWrap.hidden = !registering;
+      confirmPassword.required = registering;
 
-      confirmWrap.hidden = !cadastro;
-      confirmPassword.required = cadastro;
-
-      password.autocomplete = cadastro
+      password.autocomplete = registering
         ? 'new-password'
         : 'current-password';
 
-      heading.textContent = cadastro
+      heading.textContent = registering
         ? 'Crie sua conta'
         : 'Bem-vindo de volta!';
 
-      description.textContent = cadastro
+      description.textContent = registering
         ? 'Cadastre-se para começar sua jornada na BlockWorld.'
         : 'Entre para acessar sua conta e seus jogos.';
 
-      submitButton.textContent = cadastro
+      submitButton.textContent = registering
         ? 'Criar minha conta'
         : 'Entrar na conta';
 
-      notice.textContent = '';
-      notice.className = 'notice';
+      showNotice('', '');
     }
 
-    function destino() {
+    function getDestination() {
       const params = new URLSearchParams(location.search);
-      const proximo = params.get('next') || '/';
+      const next = params.get('next') || '/';
 
+      // Só permite caminhos locais do próprio site.
       if (
-        proximo.startsWith('/') &&
-        !proximo.startsWith('//') &&
-        !proximo.startsWith('/\\') &&
-        proximo !== '/login.html'
+        next.startsWith('/') &&
+        !next.startsWith('//') &&
+        !next.startsWith('/\\') &&
+        next !== '/login.html'
       ) {
-        return proximo;
+        return next;
       }
 
       return '/';
     }
 
-    async function requisicaoAPI(caminho, opcoes = {}) {
-      let resposta;
+    async function apiRequest(path, options = {}) {
+      let response;
 
       try {
-        resposta = await fetch(API_URL + caminho, {
-          ...opcoes,
+        response = await fetch(API_URL + path, {
+          ...options,
           credentials: 'include',
           cache: 'no-store'
         });
-      } catch (erro) {
-        console.error('[BlockWorld] Falha na API:', erro);
-
+      } catch (error) {
+        console.error('[BlockWorld] Erro de conexão:', error);
         throw new Error(
-          'Não foi possível conectar ao servidor. Verifique a conexão e o CORS.'
+          'Não foi possível conectar ao servidor. Verifique o servidor e a configuração CORS.'
         );
       }
 
-      const tipo = resposta.headers.get('content-type') || '';
-      let dados = {};
+      const contentType = response.headers.get('content-type') || '';
 
-      if (tipo.includes('application/json')) {
-        try {
-          dados = await resposta.json();
-        } catch {
-          throw new Error('O servidor retornou uma resposta JSON inválida.');
-        }
-      } else {
+      if (!contentType.includes('application/json')) {
         throw new Error(
-          'Resposta inesperada do servidor. Código HTTP ' +
-          resposta.status + '.'
+          'O servidor retornou uma resposta inesperada (HTTP ' +
+          response.status + ').'
         );
       }
 
-      if (!resposta.ok) {
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('O servidor retornou JSON inválido.');
+      }
+
+      if (!response.ok) {
         throw new Error(
-          dados.error ||
-          dados.message ||
-          'Erro HTTP ' + resposta.status + '.'
+          data.error ||
+          data.message ||
+          'O servidor retornou HTTP ' + response.status + '.'
         );
       }
 
-      return dados;
+      return data;
     }
 
-    async function verificarSessao() {
+    async function checkSession() {
       try {
-        const dados = await requisicaoAPI('/api/me');
+        const data = await apiRequest('/api/me');
 
-        if (dados.user) {
-          mostrarAviso(
-            'Você já está conectado como ' +
-            dados.user.username +
-            '. Redirecionando...',
+        if (data.user) {
+          showNotice(
+            'Você já está conectado. Redirecionando...',
             'success'
           );
 
           submitButton.disabled = true;
 
           window.setTimeout(() => {
-            location.replace(destino());
-          }, 500);
+            location.replace(getDestination());
+          }, 700);
         }
-      } catch (erro) {
-        // Uma sessão inexistente não impede o usuário de entrar.
+      } catch (error) {
         console.warn(
-          '[BlockWorld] Verificação da sessão:',
-          erro.message
+          '[BlockWorld] Não foi possível verificar a sessão:',
+          error.message
         );
       }
     }
 
-    loginTab.addEventListener('click', () => {
-      definirModo('login');
-    });
+    loginTab.addEventListener('click', () => setMode('login'));
+    registerTab.addEventListener('click', () => setMode('register'));
 
-    registerTab.addEventListener('click', () => {
-      definirModo('register');
-    });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
 
-    form.addEventListener('submit', async evento => {
-      evento.preventDefault();
+      if (sending || !form.reportValidity()) return;
 
-      if (enviando) return;
+      const name = username.value.trim();
+      const pass = password.value;
 
-      if (!form.reportValidity()) return;
-
-      const nome = username.value.trim();
-      const senha = password.value;
-
-      if (modo === 'register' && senha !== confirmPassword.value) {
-        mostrarAviso('As senhas não coincidem.');
+      if (mode === 'register' && pass !== confirmPassword.value) {
+        showNotice('As senhas não coincidem.');
+        confirmPassword.focus();
         return;
       }
 
-      enviando = true;
+      sending = true;
       submitButton.disabled = true;
-
-      submitButton.textContent = modo === 'register'
+      submitButton.textContent = mode === 'register'
         ? 'Criando conta...'
         : 'Entrando...';
 
-      notice.textContent = '';
-      notice.className = 'notice';
+      showNotice('', '');
 
       try {
-        const caminho = modo === 'register'
+        const endpoint = mode === 'register'
           ? '/api/register'
           : '/api/login';
 
-        const dados = await requisicaoAPI(caminho, {
+        const data = await apiRequest(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            username: nome,
-            password: senha
+            username: name,
+            password: pass
           })
         });
 
-        if (dados.success === false || dados.sucesso === false) {
+        if (data.success === false || data.sucesso === false) {
           throw new Error(
-            dados.error ||
-            dados.message ||
+            data.error ||
+            data.message ||
             'Não foi possível concluir a operação.'
           );
         }
 
-        mostrarAviso(
-          'Tudo certo! Entrando na BlockWorld...',
-          'success'
-        );
+        showNotice('Operação concluída! Redirecionando...', 'success');
 
-        // Evita reativar o botão durante o redirecionamento.
-        location.assign(destino());
-        return;
-
-      } catch (erro) {
-        mostrarAviso(
-          erro.message || 'Falha ao entrar na conta.'
-        );
+        location.assign(getDestination());
+      } catch (error) {
+        showNotice(error.message || 'Ocorreu um erro.');
+        sending = false;
+        submitButton.disabled = false;
+        submitButton.textContent = mode === 'register'
+          ? 'Criar minha conta'
+          : 'Entrar na conta';
       }
-
-      enviando = false;
-      submitButton.disabled = false;
-
-      submitButton.textContent = modo === 'register'
-        ? 'Criar minha conta'
-        : 'Entrar na conta';
     });
 
-    definirModo('login');
-    verificarSessao();
-  }
-
-  // Aguarda o HTML ser carregado antes de procurar os elementos.
-  if (document.readyState === 'loading') {
-    document.addEventListener(
-      'DOMContentLoaded',
-      iniciarLogin,
-      { once: true }
-    );
-  } else {
-    iniciarLogin();
-  }
-})();
-</script>
-
+    setMode('login');
+    checkSession();
+  })();
+  </script>
+</body>
+</html>
+```
