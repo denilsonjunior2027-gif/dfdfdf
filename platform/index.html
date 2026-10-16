@@ -846,10 +846,9 @@ print("Bloco criado com sucesso!")</textarea>
 
       async function carregarJogosPublicados() {
         try {
-          const resposta = await fetch("/api/games", {
-            headers: { "Accept": "application/json" },
-            cache: "no-store"
-          });
+          const resposta = await fetch('https://dfdfdf-1.onrender.com/api/games', {
+  credentials: 'include'
+})
           if (!resposta.ok) throw new Error("HTTP " + resposta.status);
 
           const dados = await resposta.json();
