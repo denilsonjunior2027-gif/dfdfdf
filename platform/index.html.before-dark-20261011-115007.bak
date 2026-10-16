@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockWorld Studio</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --blue: #1c5d99;
+      --blue-dark: #164b7d;
+      --blue-light: #347fb8;
+      --border: #c7d0dc;
+      --text: #303b4b;
+      --muted: #667587;
+    }
+    html, body { min-height: 100%; margin: 0; }
+    body { font-family: Arial, sans-serif; background: #e9edf2; color: var(--text); }
+    button, input { font: inherit; }
+    button {
+      padding: 10px 14px; border: 1px solid #27699d; border-radius: 4px;
+      background: var(--blue-light); color: #fff; font-weight: bold; cursor: pointer;
+    }
+    button:hover { background: #28699d; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #79b844; outline-offset: 2px; }
+    .bw-home { position: fixed; inset: 0; z-index: 5000; overflow-y: auto; background: #e9edf2; color: var(--text); }
+    .bw-home * { box-sizing: border-box; }
+    .bw-classic-header {
+      min-height: 58px; padding: 10px 5%; display: flex; align-items: center;
+      gap: 22px; flex-wrap: wrap; color: #fff; background: var(--blue);
+      border-bottom: 4px solid var(--blue-dark);
+    }
+    .bw-classic-logo { font-size: 24px; font-weight: bold; letter-spacing: -1px; white-space: nowrap; }
+    .bw-classic-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    .bw-classic-nav button, .bw-classic-header button { color: #fff; background: #286fae; border-color: #4b8bc2; }
+    .bw-classic-nav button:hover, .bw-classic-header button:hover { background: #3985c7; }
+    .bw-classic-search { display: flex; flex: 1; min-width: 180px; max-width: 360px; }
+    .bw-classic-search input {
+      width: 100%; min-width: 0; padding: 9px; border: 1px solid #a9b8c9;
+      border-radius: 3px 0 0 3px;
+    }
+    .bw-classic-search button { border-radius: 0 3px 3px 0; }
+    .bw-classic-content { width: min(1180px, 94%); margin: 24px auto; }
+    .bw-classic-welcome {
+      display: flex; justify-content: space-between; align-items: center; gap: 20px;
+      flex-wrap: wrap; padding: 24px; color: #fff;
+      background: linear-gradient(120deg, #2369a6, #438fc8);
+      border: 1px solid #17568c; border-radius: 5px; box-shadow: 0 2px 4px #0002;
+    }
+    .bw-classic-welcome h1 { margin: 0 0 10px; font-size: clamp(24px, 4vw, 36px); }
+    .bw-classic-welcome p { margin: 0; line-height: 1.6; color: #e0efff; }
+    .bw-classic-primary { padding: 12px 18px; background: #79aF44; border-color: #619c31; }
+    .bw-classic-primary:hover { background: #659b32; }
+    .bw-classic-section {
+      margin-top: 24px; padding: 16px; background: #fff; border: 1px solid var(--border);
+      border-radius: 4px; box-shadow: 0 1px 2px #0001;
+    }
+    .bw-classic-section h2 {
+      margin: 0 0 14px; padding-bottom: 10px; font-size: 20px;
+      color: #245b8e; border-bottom: 1px solid #d6dee7;
+    }
+    .bw-classic-games { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .bw-classic-game { min-width: 0; overflow: hidden; border: 1px solid var(--border); background: #f8fafc; }
+    .bw-classic-game[hidden] { display: none !important; }
+    .bw-classic-game-art {
+      aspect-ratio: 1.45; display: grid; place-items: center; font-size: 44px;
+      background: linear-gradient(145deg, #b9dcf3, #6b9fc9); border-bottom: 1px solid var(--border);
+    }
+    .bw-classic-game:nth-child(2) .bw-classic-game-art { background: linear-gradient(145deg, #c7e8a4, #65a65a); }
+    .bw-classic-game:nth-child(3) .bw-classic-game-art { background: linear-gradient(145deg, #f8d5a4, #d98c61); }
+    .bw-classic-game:nth-child(4) .bw-classic-game-art { background: linear-gradient(145deg, #d4c5f4, #8c77c4); }
+    .bw-classic-game-body { padding: 10px; }
+    .bw-classic-game h3 { margin: 0 0 6px; font-size: 14px; }
+    .bw-classic-game p { min-height: 32px; margin: 0 0 10px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+    .bw-classic-game button { width: 100%; }
+    .bw-classic-columns { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+    .bw-classic-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .bw-classic-links button { color: #245b8e; background: #edf5fc; border-color: #c3d9eb; }
+    .bw-classic-footer { padding: 24px; text-align: center; color: #718095; font-size: 12px; line-height: 1.6; }
+    #bwNoGames { color: var(--muted); }
+
+    /* Editor BlockWorld existente */
+    .app { display:grid; grid-template-rows:54px 44px minmax(0,1fr); height:100vh; background:#101522; color:#e6edf8; }
+    .app-topbar,.app-toolbar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#1b2740; border-bottom:1px solid #34435e; flex-wrap:wrap; }
+    .app-topbar { justify-content:space-between; }
+    .app-brand { color:#65c2ff; font-weight:bold; font-size:20px; }
+    .app-menus { display:flex; gap:5px; }
+    .app-menus button,.app-toolbar button,.side-tools button { background:#293953; border-color:#405574; }
+    .app-main { display:grid; grid-template-columns:180px minmax(0,1fr) 210px; min-height:0; gap:10px; padding:10px; }
+    .app-panel { min-width:0; min-height:0; overflow:auto; border:1px solid #34435e; border-radius:8px; background:#182236; }
+    .app-panel-title { padding:12px; font-weight:bold; background:#222f48; border-bottom:1px solid #34435e; }
+    .app-panel-body { padding:10px; }
+    .side-tools { display:grid; gap:8px; }
+    .app-workspace { display:grid; grid-template-rows:minmax(250px,1fr) 220px; gap:10px; min-width:0; min-height:0; }
+    .app-viewport-panel,.app-lua-panel { display:flex; flex-direction:column; min-height:0; }
+    #viewport { position:relative; flex:1; min-height:220px; overflow:hidden; background:#111720; }
+    #scene { display:block; width:100%; height:100%; }
+    .app-status { padding:8px 10px; background:#141d2d; border-top:1px solid #34435e; color:#9fe7b0; font-size:12px; }
+    .app-lua-editor { display:flex; min-height:0; flex:1; background:#0c1220; }
+    #lineNumbers { width:42px; flex-shrink:0; overflow:hidden; margin:0; padding:10px 7px; color:#65758e; background:#0a101c; text-align:right; white-space:pre; font:13px/1.55 Consolas,monospace; }
+    #luaCode { flex:1; width:100%; min-width:0; min-height:110px; resize:vertical; border:0; outline:0; padding:10px; color:#d8e6ff; background:#0c1220; font:13px/1.55 Consolas,monospace; tab-size:2; }
+    #luaConsole { max-height:55px; overflow:auto; padding:7px 10px; color:#9fe7b0; background:#080d17; font:12px Consolas,monospace; white-space:pre-wrap; }
+    .app-prop-label { display:block; margin:12px 0 5px; color:#b8c6df; font-size:12px; }
+    .app-prop-input { width:100%; padding:8px; border:1px solid #3c4d69; border-radius:5px; background:#101827; color:#fff; }
+    #count { color:#b8c6df; font-size:12px; }
+    #objectName { width:100%; padding:8px; background:#101827; border:1px solid #3c4d69; color:white; border-radius:5px; }
+    @media(max-width:850px) {
+      .app { height:auto; min-height:100vh; grid-template-rows:auto auto 1fr; }
+      .app-main { grid-template-columns:1fr; }
+      .app-workspace { grid-template-rows:420px 260px; }
+      .app-panel { overflow:visible; }
+    }
+
+    /* Mantém o editor existente oculto até o usuário clicar em Criar. */
+    body:not(.bw-show-studio) .app { display: none !important; }
+    body.bw-show-studio .bw-home { display: none !important; }
+    body.bw-show-studio .app { display: grid !important; }
+    body.bw-show-studio { background: #101522; }
+    @media (max-width: 760px) {
+      .bw-classic-games { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bw-classic-columns { grid-template-columns: 1fr; }
+      .bw-classic-header { gap: 12px; }
+    }
+    @media (max-width: 420px) {
+      .bw-classic-games { grid-template-columns: 1fr; }
+      .bw-classic-search { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bw-home" id="bwHome">
+    <header class="bw-classic-header">
+      <div class="bw-classic-logo">◈ BlockWorld</div>
+      <nav class="bw-classic-nav" aria-label="Navegação principal">
+        <button type="button" data-bw-page="home">Início</button>
+        <button type="button" data-bw-page="games">Jogos</button>
+        <button type="button" data-bw-page="avatar">Avatar</button>
+        <button type="button" data-bw-page="studio">Criar</button>
+      </nav>
+      <form class="bw-classic-search" id="bwSearch">
+        <input id="bwSearchInput" type="search" placeholder="Buscar jogos..." aria-label="Buscar jogos">
+        <button type="submit">Buscar</button>
+      </form>
+    </header>
+
+    <main class="bw-classic-content">
+      <section class="bw-classic-welcome">
+        <div>
+          <h1>Seu mundo. Suas aventuras.</h1>
+          <p>Explore jogos, crie experiências e construa seu próprio universo.</p>
+        </div>
+        <button type="button" class="bw-classic-primary" id="bwOpenStudio">Abrir BlockWorld Studio</button>
+      </section>
+
+      <section class="bw-classic-section" id="bwGamesSection">
+        <h2>Jogos em destaque</h2>
+        <div class="bw-classic-games" id="bwGameCatalog">
+          <article class="bw-classic-game" data-search="obby aventura parkour plataformas">
+            <div class="bw-classic-game-art" aria-hidden="true">🧱</div>
+            <div class="bw-classic-game-body">
+              <h3>Obby Clássico</h3><p>Supere plataformas e explore o cenário.</p>
+              <button type="button" data-bw-play="Obby Clássico">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="natureza floresta exploração verde">
+            <div class="bw-classic-game-art" aria-hidden="true">🌳</div>
+            <div class="bw-classic-game-body">
+              <h3>Mundo Verde</h3><p>Explore um mundo cheio de possibilidades.</p>
+              <button type="button" data-bw-play="Mundo Verde">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="cidade construção casas prédios">
+            <div class="bw-classic-game-art" aria-hidden="true">🏘️</div>
+            <div class="bw-classic-game-body">
+              <h3>Cidade Block</h3><p>Imagine e construa sua própria cidade.</p>
+              <button type="button" data-bw-play="Cidade Block">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="aventura espaço planetas foguete">
+            <div class="bw-classic-game-art" aria-hidden="true">🚀</div>
+            <div class="bw-classic-game-body">
+              <h3>Expedição Espacial</h3><p>Prepare-se para uma aventura entre planetas.</p>
+              <button type="button" data-bw-play="Expedição Espacial">Jogar</button>
+            </div>
+          </article>
+        </div>
+        <p id="bwNoGames" hidden>Nenhum jogo encontrado. Tente outra busca.</p>
+      </section>
+
+      <div class="bw-classic-columns">
+        <section class="bw-classic-section">
+          <h2>Crie seu próprio jogo</h2>
+          <p>Abra o editor 3D, crie objetos e experimente scripts Lua.</p>
+          <button type="button" class="bw-classic-primary" id="bwCreateGame">Abrir editor</button>
+        </section>
+        <section class="bw-classic-section">
+          <h2>Minha conta</h2>
+          <p id="bwProfileMessage">Perfil local de demonstração</p>
+          <div class="bw-classic-links">
+            <button type="button" id="bwProfile">Meu perfil</button>
+            <button type="button" id="bwAbout">Sobre</button>
+          </div>
+        </section>
+      </div>
+
+      <footer class="bw-classic-footer">
+        BlockWorld · Plataforma experimental de jogos<br>
+        Catálogo demonstrativo local — sem contas ou publicação online nesta versão.
+      </footer>
+    </main>
+  </div>
+
+
+  <div class="app" id="app">
+    <header class="app-topbar">
+      <div class="app-brand">◈ BlockWorld Studio</div>
+      <div class="app-menus">
+        <button type="button" id="menuFile">Arquivo</button>
+        <button type="button" id="menuEdit">Editar</button>
+        <button type="button" id="menuView">Visualizar</button>
+        <button type="button" id="menuHelp">Ajuda</button>
+      </div>
+      <button type="button" id="backToHome">← Plataforma</button>
+    </header>
+
+    <div class="app-toolbar">
+      <button type="button" id="block">🧱 Bloco</button>
+      <button type="button" id="ball">⚪ Esfera</button>
+      <button type="button" id="remove">🗑 Remover último</button>
+      <button type="button" id="reset">↺ Reiniciar cena</button>
+      <button type="button" id="luaRunTop">▶ Executar Lua</button>
+      <span id="count">Objetos: 0</span>
+    </div>
+
+    <div class="app-main">
+      <aside class="app-panel">
+        <div class="app-panel-title">🧰 Explorar</div>
+        <div class="app-panel-body side-tools">
+          <button type="button" id="sideBlock">Criar bloco</button>
+          <button type="button" id="sideBall">Criar esfera</button>
+          <button type="button" id="sideReset">Limpar mundo</button>
+          <p style="font-size:12px;line-height:1.5;color:#9aaac3">Clique nos objetos da cena para selecioná-los.</p>
+        </div>
+      </aside>
+
+      <main class="app-workspace">
+        <section class="app-panel app-viewport-panel">
+          <div class="app-panel-title">🌎 Mundo 3D</div>
+          <div id="viewport"><canvas id="scene"></canvas></div>
+          <div id="status" class="app-status">Preparando o motor 3D...</div>
+        </section>
+
+        <section class="app-panel app-lua-panel">
+          <div class="app-panel-title">📜 Editor Lua</div>
+          <div class="app-toolbar">
+            <button type="button" id="luaRun">▶ Executar</button>
+            <button type="button" id="luaClear">Limpar console</button>
+            <button type="button" id="saveLua">Exportar .lua</button>
+          </div>
+          <div class="app-lua-editor">
+            <pre id="lineNumbers">1
+2
+3</pre>
+            <textarea id="luaCode" spellcheck="false">print("Olá, BlockWorld!")
+local bloco = criarBloco(0, 1, 0)
+print("Bloco criado com sucesso!")</textarea>
+          </div>
+          <div id="luaConsole">Console Lua pronto.</div>
+        </section>
+      </main>
+
+      <aside class="app-panel">
+        <div class="app-panel-title">⚙ Propriedades</div>
+        <div class="app-panel-body">
+          <label class="app-prop-label" for="objectName">Objeto selecionado</label>
+          <input id="objectName" placeholder="Nenhum objeto">
+          <p style="font-size:12px;line-height:1.5;color:#9aaac3">Selecione um objeto na cena para visualizar seu nome.</p>
+          <div id="footerStatus" class="app-status">Pronto</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- O editor .app e seu motor 3D devem continuar no projeto existente.
+       renderer.js é carregado sem ser substituído por esta página inicial. -->
+  <script src="./renderer.js"></script>
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+
+      function abrirStudio() {
+        const app = document.querySelector(".app");
+        if (!app) {
+          alert("O editor .app não foi encontrado no index.html. Restaure a seção do editor existente antes de abrir o Studio.");
+          return;
+        }
+        document.body.classList.add("bw-show-studio");
+        window.dispatchEvent(new Event("resize"));
+      }
+
+      function voltarInicio() {
+        document.body.classList.remove("bw-show-studio");
+        window.dispatchEvent(new Event("resize"));
+      }
+
+      $("bwOpenStudio").addEventListener("click", abrirStudio);
+      $("bwCreateGame").addEventListener("click", abrirStudio);
+
+      document.querySelectorAll("[data-bw-page]").forEach(button => {
+        button.addEventListener("click", () => {
+          const page = button.dataset.bwPage;
+          if (page === "studio") {
+            abrirStudio();
+          } else if (page === "home" || page === "games") {
+            voltarInicio();
+            if (page === "games") $("bwGamesSection").scrollIntoView({ behavior: "smooth" });
+            else window.scrollTo({ top: 0, behavior: "smooth" });
+          } else if (page === "avatar") {
+            $("bwProfileMessage").textContent =
+              "Avatar de demonstração. A personalização ainda não está implementada.";
+            $("bwProfileMessage").scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      });
+
+      $("bwSearch").addEventListener("submit", event => {
+        event.preventDefault();
+        const query = $("bwSearchInput").value.trim().toLocaleLowerCase("pt-BR");
+        let found = 0;
+        document.querySelectorAll("#bwGameCatalog .bw-classic-game").forEach(card => {
+          const haystack = (card.innerText + " " + (card.dataset.search || ""))
+            .toLocaleLowerCase("pt-BR");
+          const matches = haystack.includes(query);
+          card.hidden = !matches;
+          if (matches) found++;
+        });
+        $("bwNoGames").hidden = found !== 0;
+      });
+
+      document.querySelectorAll("[data-bw-play]").forEach(button => {
+        button.addEventListener("click", () => {
+          alert('"' + button.dataset.bwPlay +
+            '" está no catálogo demonstrativo. O jogo ainda precisa ser criado antes de poder jogar.');
+        });
+      });
+
+      $("bwProfile").addEventListener("click", () => {
+        $("bwProfileMessage").textContent = "Jogador local · Perfil demonstrativo";
+      });
+
+      $("bwAbout").addEventListener("click", () => {
+        alert("BlockWorld Studio\nPlataforma experimental de criação de jogos.\nO catálogo atual é demonstrativo e local.");
+      });
+
+      // Suporte seguro aos controles antigos, caso estejam presentes no editor.
+      function clicarSeExistir(origem, destino) {
+        const source = $(origem);
+        const target = $(destino);
+        if (source && target) source.addEventListener("click", () => target.click());
+      }
+      clicarSeExistir("sideBlock", "block");
+      clicarSeExistir("sideBall", "ball");
+      clicarSeExistir("sideReset", "reset");
+      clicarSeExistir("luaRunTop", "luaRun");
+
+      const code = $("luaCode");
+      const lines = $("lineNumbers");
+      if (code && lines) {
+        const updateLines = () => {
+          lines.textContent = Array.from(
+            { length: Math.max(1, code.value.split("\n").length) },
+            (_, i) => i + 1
+          ).join("\n");
+        };
+        code.addEventListener("input", updateLines);
+        code.addEventListener("scroll", () => { lines.scrollTop = code.scrollTop; });
+        code.addEventListener("keydown", event => {
+          if (event.key === "Tab") {
+            event.preventDefault();
+            code.setRangeText("  ", code.selectionStart, code.selectionEnd, "end");
+            updateLines();
+          }
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            if ($("luaRun")) $("luaRun").click();
+          }
+        });
+        updateLines();
+      }
+
+      const saveLua = $("saveLua");
+      if (saveLua && code) {
+        saveLua.addEventListener("click", () => {
+          const url = URL.createObjectURL(new Blob([code.value], {
+            type: "text/plain;charset=utf-8"
+          }));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "Script.lua";
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          if ($("footerStatus")) $("footerStatus").textContent = "Script exportado";
+        });
+      }
+
+      const menuFile = $("menuFile");
+      if (menuFile && saveLua) menuFile.addEventListener("click", () => saveLua.click());
+      const menuEdit = $("menuEdit");
+      if (menuEdit && code) menuEdit.addEventListener("click", () => code.focus());
+      const menuView = $("menuView");
+      if (menuView && $("viewport")) {
+        menuView.addEventListener("click", () => $("viewport").scrollIntoView({ block: "nearest" }));
+      }
+      const menuHelp = $("menuHelp");
+      if (menuHelp) {
+        menuHelp.addEventListener("click", () => alert(
+          "BlockWorld Studio\n\nCrie objetos 3D e execute scripts Lua.\nAtalho: Ctrl + Enter para executar Lua."
+        ));
+      }
+
+      const backToHome = $("backToHome");
+      if (backToHome) backToHome.addEventListener("click", () => {
+        document.body.classList.remove("bw-show-studio");
+        window.dispatchEvent(new Event("resize"));
+      });
+
+      const clearConsole = $("luaClear");
+      if (clearConsole && $("luaConsole")) {
+        clearConsole.addEventListener("click", () => { $("luaConsole").textContent = ""; });
+      }
+
+      const status = $("status");
+      const footerStatus = $("footerStatus");
+      if (status && footerStatus) {
+        new MutationObserver(() => {
+          footerStatus.textContent = status.textContent || "Pronto";
+        }).observe(status, { childList: true, characterData: true, subtree: true });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockWorld Studio</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --blue: #1c5d99;
+      --blue-dark: #164b7d;
+      --blue-light: #347fb8;
+      --border: #c7d0dc;
+      --text: #303b4b;
+      --muted: #667587;
+    }
+    html, body { min-height: 100%; margin: 0; }
+    body { font-family: Arial, sans-serif; background: #e9edf2; color: var(--text); }
+    button, input { font: inherit; }
+    button {
+      padding: 10px 14px; border: 1px solid #27699d; border-radius: 4px;
+      background: var(--blue-light); color: #fff; font-weight: bold; cursor: pointer;
+    }
+    button:hover { background: #28699d; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #79b844; outline-offset: 2px; }
+    .bw-home { position: fixed; inset: 0; z-index: 5000; overflow-y: auto; background: #e9edf2; color: var(--text); }
+    .bw-home * { box-sizing: border-box; }
+    .bw-classic-header {
+      min-height: 58px; padding: 10px 5%; display: flex; align-items: center;
+      gap: 22px; flex-wrap: wrap; color: #fff; background: var(--blue);
+      border-bottom: 4px solid var(--blue-dark);
+    }
+    .bw-classic-logo { font-size: 24px; font-weight: bold; letter-spacing: -1px; white-space: nowrap; }
+    .bw-classic-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    .bw-classic-nav button, .bw-classic-header button { color: #fff; background: #286fae; border-color: #4b8bc2; }
+    .bw-classic-nav button:hover, .bw-classic-header button:hover { background: #3985c7; }
+    .bw-classic-search { display: flex; flex: 1; min-width: 180px; max-width: 360px; }
+    .bw-classic-search input {
+      width: 100%; min-width: 0; padding: 9px; border: 1px solid #a9b8c9;
+      border-radius: 3px 0 0 3px;
+    }
+    .bw-classic-search button { border-radius: 0 3px 3px 0; }
+    .bw-classic-content { width: min(1180px, 94%); margin: 24px auto; }
+    .bw-classic-welcome {
+      display: flex; justify-content: space-between; align-items: center; gap: 20px;
+      flex-wrap: wrap; padding: 24px; color: #fff;
+      background: linear-gradient(120deg, #2369a6, #438fc8);
+      border: 1px solid #17568c; border-radius: 5px; box-shadow: 0 2px 4px #0002;
+    }
+    .bw-classic-welcome h1 { margin: 0 0 10px; font-size: clamp(24px, 4vw, 36px); }
+    .bw-classic-welcome p { margin: 0; line-height: 1.6; color: #e0efff; }
+    .bw-classic-primary { padding: 12px 18px; background: #79aF44; border-color: #619c31; }
+    .bw-classic-primary:hover { background: #659b32; }
+    .bw-classic-section {
+      margin-top: 24px; padding: 16px; background: #fff; border: 1px solid var(--border);
+      border-radius: 4px; box-shadow: 0 1px 2px #0001;
+    }
+    .bw-classic-section h2 {
+      margin: 0 0 14px; padding-bottom: 10px; font-size: 20px;
+      color: #245b8e; border-bottom: 1px solid #d6dee7;
+    }
+    .bw-classic-games { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .bw-classic-game { min-width: 0; overflow: hidden; border: 1px solid var(--border); background: #f8fafc; }
+    .bw-classic-game[hidden] { display: none !important; }
+    .bw-classic-game-art {
+      aspect-ratio: 1.45; display: grid; place-items: center; font-size: 44px;
+      background: linear-gradient(145deg, #b9dcf3, #6b9fc9); border-bottom: 1px solid var(--border);
+    }
+    .bw-classic-game:nth-child(2) .bw-classic-game-art { background: linear-gradient(145deg, #c7e8a4, #65a65a); }
+    .bw-classic-game:nth-child(3) .bw-classic-game-art { background: linear-gradient(145deg, #f8d5a4, #d98c61); }
+    .bw-classic-game:nth-child(4) .bw-classic-game-art { background: linear-gradient(145deg, #d4c5f4, #8c77c4); }
+    .bw-classic-game-body { padding: 10px; }
+    .bw-classic-game h3 { margin: 0 0 6px; font-size: 14px; }
+    .bw-classic-game p { min-height: 32px; margin: 0 0 10px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+    .bw-classic-game button { width: 100%; }
+    .bw-classic-columns { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+    .bw-classic-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .bw-classic-links button { color: #245b8e; background: #edf5fc; border-color: #c3d9eb; }
+    .bw-classic-footer { padding: 24px; text-align: center; color: #718095; font-size: 12px; line-height: 1.6; }
+    #bwNoGames { color: var(--muted); }
+
+    /* Editor BlockWorld existente */
+    .app { display:grid; grid-template-rows:54px 44px minmax(0,1fr); height:100vh; background:#101522; color:#e6edf8; }
+    .app-topbar,.app-toolbar { display:flex; align-items:center; gap:8px; padding:8px 14px; background:#1b2740; border-bottom:1px solid #34435e; flex-wrap:wrap; }
+    .app-topbar { justify-content:space-between; }
+    .app-brand { color:#65c2ff; font-weight:bold; font-size:20px; }
+    .app-menus { display:flex; gap:5px; }
+    .app-menus button,.app-toolbar button,.side-tools button { background:#293953; border-color:#405574; }
+    .app-main { display:grid; grid-template-columns:180px minmax(0,1fr) 210px; min-height:0; gap:10px; padding:10px; }
+    .app-panel { min-width:0; min-height:0; overflow:auto; border:1px solid #34435e; border-radius:8px; background:#182236; }
+    .app-panel-title { padding:12px; font-weight:bold; background:#222f48; border-bottom:1px solid #34435e; }
+    .app-panel-body { padding:10px; }
+    .side-tools { display:grid; gap:8px; }
+    .app-workspace { display:grid; grid-template-rows:minmax(250px,1fr) 220px; gap:10px; min-width:0; min-height:0; }
+    .app-viewport-panel,.app-lua-panel { display:flex; flex-direction:column; min-height:0; }
+    #viewport { position:relative; flex:1; min-height:220px; overflow:hidden; background:#111720; }
+    #scene { display:block; width:100%; height:100%; }
+    .app-status { padding:8px 10px; background:#141d2d; border-top:1px solid #34435e; color:#9fe7b0; font-size:12px; }
+    .app-lua-editor { display:flex; min-height:0; flex:1; background:#0c1220; }
+    #lineNumbers { width:42px; flex-shrink:0; overflow:hidden; margin:0; padding:10px 7px; color:#65758e; background:#0a101c; text-align:right; white-space:pre; font:13px/1.55 Consolas,monospace; }
+    #luaCode { flex:1; width:100%; min-width:0; min-height:110px; resize:vertical; border:0; outline:0; padding:10px; color:#d8e6ff; background:#0c1220; font:13px/1.55 Consolas,monospace; tab-size:2; }
+    #luaConsole { max-height:55px; overflow:auto; padding:7px 10px; color:#9fe7b0; background:#080d17; font:12px Consolas,monospace; white-space:pre-wrap; }
+    .app-prop-label { display:block; margin:12px 0 5px; color:#b8c6df; font-size:12px; }
+    .app-prop-input { width:100%; padding:8px; border:1px solid #3c4d69; border-radius:5px; background:#101827; color:#fff; }
+    #count { color:#b8c6df; font-size:12px; }
+    #objectName { width:100%; padding:8px; background:#101827; border:1px solid #3c4d69; color:white; border-radius:5px; }
+    @media(max-width:850px) {
+      .app { height:auto; min-height:100vh; grid-template-rows:auto auto 1fr; }
+      .app-main { grid-template-columns:1fr; }
+      .app-workspace { grid-template-rows:420px 260px; }
+      .app-panel { overflow:visible; }
+    }
+
+    /* MantÃƒÂ©m o editor existente oculto atÃƒÂ© o usuÃƒÂ¡rio clicar em Criar. */
+    body:not(.bw-show-studio) .app { display: none !important; }
+    body.bw-show-studio .bw-home { display: none !important; }
+    body.bw-show-studio .app { display: grid !important; }
+    body.bw-show-studio { background: #101522; }
+    @media (max-width: 760px) {
+      .bw-classic-games { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .bw-classic-columns { grid-template-columns: 1fr; }
+      .bw-classic-header { gap: 12px; }
+    }
+    @media (max-width: 420px) {
+      .bw-classic-games { grid-template-columns: 1fr; }
+      .bw-classic-search { max-width: none; }
+    }
+      /* BLOCKWORLD_DARK_HOME_V1 */
+    .bw-home {
+      --blue: #4c7dff;
+      --blue-dark: #3158c9;
+      --blue-light: #638cff;
+      --border: #2b3850;
+      --text: #e8efff;
+      --muted: #91a0bb;
+      background: #0c111c;
+      color: #e8efff;
+    }
+
+    .bw-home .bw-classic-header {
+      background: #151e2e;
+      border-bottom: 2px solid #4c7dff;
+      color: #e8efff;
+    }
+
+    .bw-home .bw-classic-nav button,
+    .bw-home .bw-classic-header button {
+      color: #e8efff;
+      background: #23314a;
+      border-color: #354765;
+    }
+
+    .bw-home .bw-classic-nav button:hover,
+    .bw-home .bw-classic-header button:hover {
+      background: #294778;
+    }
+
+    .bw-home .bw-classic-welcome {
+      background: linear-gradient(135deg, #172744, #202e49);
+      border-color: #354765;
+      color: #f2f6ff;
+    }
+
+    .bw-home .bw-classic-welcome p {
+      color: #c3d4f4;
+    }
+
+    .bw-home .bw-classic-primary {
+      background: #147e67;
+      border-color: #21a58a;
+      color: #ffffff;
+    }
+
+    .bw-home .bw-classic-primary:hover {
+      background: #19977b;
+    }
+
+    .bw-home .bw-classic-section,
+    .bw-home .bw-classic-game,
+    .bw-home .bw-classic-card,
+    .bw-home .bw-classic-profile {
+      background: #151e2e;
+      border-color: #2b3850;
+      color: #e8efff;
+    }
+
+    .bw-home input,
+    .bw-home textarea,
+    .bw-home select {
+      background: #0c1320;
+      color: #e8efff;
+      border-color: #354765;
+    }
+
+    .bw-home input::placeholder,
+    .bw-home textarea::placeholder {
+      color: #91a0bb;
+    }
+
+    .bw-home p,
+    .bw-home .bw-classic-muted {
+      color: #b4c2dc;
+    }
+
+    .bw-home a {
+      color: #7ee7c4;
+    }
+
+    .bw-home button:focus-visible,
+    .bw-home input:focus-visible {
+      outline-color: #7ee7c4;
+    }
+  /* BW_AVATAR_EDITOR_V1 */
+.bw-avatar-editor {
+  margin: 28px auto;
+  padding: 24px;
+  max-width: 1000px;
+  border: 1px solid #35415a;
+  border-radius: 18px;
+  background: #111827;
+  color: #f3f4f6;
+}
+.bw-avatar-editor[hidden] { display: none !important; }
+.bw-avatar-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(240px, 1fr);
+  gap: 24px;
+}
+.bw-avatar-preview {
+  min-height: 310px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-radius: 14px;
+  background: linear-gradient(#202c42, #101725);
+}
+.bw-avatar-hair { width: 76px; height: 22px; border-radius: 14px 14px 2px 2px; }
+.bw-avatar-head { width: 66px; height: 66px; border-radius: 12px; }
+.bw-avatar-body { display: flex; gap: 5px; }
+.bw-avatar-arm { width: 23px; height: 72px; border-radius: 5px; }
+.bw-avatar-shirt {
+  width: 76px; height: 78px; border-radius: 6px;
+  background-color: #635bdb;
+}
+.bw-avatar-legs { display: flex; gap: 5px; }
+.bw-avatar-leg { width: 34px; height: 65px; border-radius: 4px; background: #27344d; }
+.bw-avatar-controls { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.bw-avatar-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.bw-avatar-controls input, .bw-avatar-controls select {
+  width: 100%; min-height: 38px; box-sizing: border-box;
+  border: 1px solid #4b5870; border-radius: 8px;
+  padding: 6px; background: #202b3e; color: white;
+}
+.bw-avatar-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.bw-avatar-actions button {
+  padding: 10px 16px; border: 0; border-radius: 8px;
+  cursor: pointer; background: #7ee7c4; color: #12211e; font-weight: 700;
+}
+.bw-avatar-status { min-height: 24px; margin-top: 12px; color: #a7f3d0; }
+.bw-avatar-shirt[data-pattern="stripes"], .bw-avatar-leg[data-pattern="stripes"] {
+  background-image: repeating-linear-gradient(0deg, transparent 0 10px, #ffffff55 10px 15px);
+}
+.bw-avatar-shirt[data-pattern="dots"], .bw-avatar-leg[data-pattern="dots"] {
+  background-image: radial-gradient(#ffffff99 2px, transparent 3px);
+  background-size: 14px 14px;
+}
+.bw-avatar-shirt[data-pattern="checker"], .bw-avatar-leg[data-pattern="checker"] {
+  background-image: conic-gradient(#ffffff55 25%, transparent 0 50%, #ffffff55 0 75%, transparent 0);
+  background-size: 18px 18px;
+}
+@media(max-width:650px) {
+  .bw-avatar-layout { grid-template-columns: 1fr; }
+  .bw-avatar-controls { grid-template-columns: 1fr; }
+}
+/* END BW_AVATAR_EDITOR_V1 */
+    .bw-catalog-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0 16px; }
+    .bw-catalog-controls label { font-size:12px; color:var(--muted); }
+    .bw-catalog-controls select { max-width:100%; padding:9px; border:1px solid var(--border); border-radius:5px; background:var(--panel,#fff); color:inherit; }
+    .bw-game-visits { margin:0 0 10px; color:var(--muted); font-size:12px; }
+/* BW_SOCIAL_UI_V1 */
+.bw-social-page { margin:20px 0; padding:22px; border:1px solid var(--border); border-radius:12px; background:var(--panel, #151b29); color:inherit; }
+.bw-social-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+.bw-social-card { min-width:0; padding:15px; border:1px solid var(--border); border-radius:9px; }
+.bw-social-page input,.bw-social-page textarea { box-sizing:border-box; width:100%; padding:10px; margin:5px 0 10px; border:1px solid var(--border); border-radius:6px; background:var(--panel,#101522); color:inherit; }
+.bw-social-page button { margin:4px 4px 4px 0; padding:8px 12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; background:var(--panel,#202a3d); color:inherit; }
+.bw-social-item { padding:10px 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+.bw-social-status { min-height:22px; color:var(--muted); white-space:pre-wrap; }
+.bw-social-messages { max-height:260px; overflow-y:auto; padding:8px; border:1px solid var(--border); border-radius:6px; }
+.bw-social-message { padding:8px; margin:5px 0; border-radius:6px; background:var(--panel,#202a3d); overflow-wrap:anywhere; }
+.bw-social-muted { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+  <div class="bw-home" id="bwHome">
+    <header class="bw-classic-header">
+      <div class="bw-classic-logo">Ã¢â€”Ë† BlockWorld</div>
+      <nav class="bw-classic-nav" aria-label="NavegaÃƒÂ§ÃƒÂ£o principal">
+        <button type="button" data-bw-page="home">InÃƒÂ­cio</button>
+        <button type="button" data-bw-page="games">Jogos</button>
+        <button type="button" data-bw-page="avatar">Avatar</button>
+        <button type="button" data-bw-page="social">Comunidade</button>
+        <button type="button" data-bw-page="studio">Criar</button>
+      </nav>
+      <form class="bw-classic-search" id="bwSearch">
+        <input id="bwSearchInput" type="search" placeholder="Buscar jogos..." aria-label="Buscar jogos">
+        <button type="submit">Buscar</button>
+      </form>
+    </header>
+
+    <main class="bw-classic-content">
+      <section class="bw-classic-welcome">
+        <div>
+          <h1>Seu mundo. Suas aventuras.</h1>
+          <p>Explore jogos, crie experiÃƒÂªncias e construa seu prÃƒÂ³prio universo.</p>
+        </div>
+        <button type="button" class="bw-classic-primary" id="bwOpenStudio">Abrir BlockWorld Studio</button>
+      </section>
+
+      <section class="bw-classic-section" id="bwGamesSection">
+        <h2>Jogos em destaque</h2>
+        <div class="bw-catalog-controls" id="bwCatalogControls">
+          <label for="bwCatalogSort">Ordenar jogos:</label>
+          <select id="bwCatalogSort">
+            <option value="recent">Adicionados recentemente</option>
+            <option value="popular">Mais famosos — visitas</option>
+            <option value="category">Por categoria</option>
+          </select>
+          <label for="bwCatalogCategory">Categoria:</label>
+          <select id="bwCatalogCategory">
+            <option value="all">Todas as categorias</option>
+            <option value="Aventura">Aventura</option>
+            <option value="Construção">Construção</option>
+            <option value="Corrida">Corrida</option>
+            <option value="Obby">Obby</option>
+            <option value="Simulação">Simulação</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="bw-classic-games" id="bwGameCatalog">
+          <article class="bw-classic-game" data-search="obby aventura parkour plataformas">
+            <div class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Â§Â±</div>
+            <div class="bw-classic-game-body">
+              <h3>Obby ClÃƒÂ¡ssico</h3><p>Supere plataformas e explore o cenÃƒÂ¡rio.</p>
+              <button type="button" data-bw-play="Obby ClÃƒÂ¡ssico">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="natureza floresta exploraÃƒÂ§ÃƒÂ£o verde">
+            <div class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Å’Â³</div>
+            <div class="bw-classic-game-body">
+              <h3>Mundo Verde</h3><p>Explore um mundo cheio de possibilidades.</p>
+              <button type="button" data-bw-play="Mundo Verde">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="cidade construÃƒÂ§ÃƒÂ£o casas prÃƒÂ©dios">
+            <div class="bw-classic-game-art" aria-hidden="true">Ã°Å¸ÂËœÃ¯Â¸Â</div>
+            <div class="bw-classic-game-body">
+              <h3>Cidade Block</h3><p>Imagine e construa sua prÃƒÂ³pria cidade.</p>
+              <button type="button" data-bw-play="Cidade Block">Jogar</button>
+            </div>
+          </article>
+          <article class="bw-classic-game" data-search="aventura espaÃƒÂ§o planetas foguete">
+            <div class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Å¡â‚¬</div>
+            <div class="bw-classic-game-body">
+              <h3>ExpediÃƒÂ§ÃƒÂ£o Espacial</h3><p>Prepare-se para uma aventura entre planetas.</p>
+              <button type="button" data-bw-play="ExpediÃƒÂ§ÃƒÂ£o Espacial">Jogar</button>
+            </div>
+          </article>
+        </div>
+        <p id="bwNoGames" hidden>Nenhum jogo encontrado. Tente outra busca.</p>
+      </section>
+
+      <div class="bw-classic-columns">
+        <section class="bw-classic-section">
+          <h2>Crie seu prÃƒÂ³prio jogo</h2>
+          <p>Abra o editor 3D, crie objetos e experimente scripts Lua.</p>
+          <button type="button" class="bw-classic-primary" id="bwCreateGame">Abrir editor</button>
+        </section>
+        <section class="bw-classic-section">
+          <h2>Minha conta</h2>
+          <p id="bwProfileMessage">Perfil local de demonstraÃƒÂ§ÃƒÂ£o</p>
+          <div class="bw-classic-links">
+            <button type="button" id="bwProfile">Meu perfil</button>
+            <button type="button" id="bwAbout">Sobre</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- BW_SOCIAL_UI_V1 -->
+<section class="bw-social-page" id="bwSocialPage" hidden>
+  <h2>Comunidade BlockWorld</h2>
+  <p class="bw-social-muted">Adicione amigos e converse com eles fora das partidas.</p>
+  <p id="bwSocialStatus" class="bw-social-status" role="status" aria-live="polite"></p>
+
+  <div class="bw-social-grid">
+    <section class="bw-social-card">
+      <h3>Encontrar jogadores</h3>
+      <form id="bwSocialSearchForm">
+        <label for="bwSocialSearchName">Nome de usuário</label>
+        <input id="bwSocialSearchName" maxlength="32" autocomplete="off" required>
+        <button type="submit">Ver perfil</button>
+      </form>
+      <div id="bwSocialSearchResult"></div>
+    </section>
+
+    <section class="bw-social-card">
+      <h3>Meu perfil</h3>
+      <p id="bwSocialMyName">Carregando conta...</p>
+      <label for="bwSocialDescription">Descrição (até 160 caracteres)</label>
+      <textarea id="bwSocialDescription" maxlength="160" rows="3"></textarea>
+      <button type="button" id="bwSocialSaveProfile">Salvar descrição</button>
+    </section>
+
+    <section class="bw-social-card">
+      <h3>Meus amigos</h3>
+      <div id="bwSocialFriends">Carregando...</div>
+      <button type="button" id="bwSocialRefresh">Atualizar listas</button>
+    </section>
+
+    <section class="bw-social-card">
+      <h3>Pedidos recebidos</h3>
+      <div id="bwSocialIncoming">Carregando...</div>
+      <h3>Pedidos enviados</h3>
+      <div id="bwSocialOutgoing">Carregando...</div>
+    </section>
+
+    <section class="bw-social-card">
+      <h3>Mensagens privadas</h3>
+      <label for="bwSocialChatFriend">ID do amigo</label>
+      <input id="bwSocialChatFriend" maxlength="80" autocomplete="off"
+             placeholder="Selecione um amigo na lista">
+      <div id="bwSocialMessages" class="bw-social-messages"
+           aria-live="polite">Selecione um amigo para abrir a conversa.</div>
+      <form id="bwSocialMessageForm">
+        <label for="bwSocialMessageText">Mensagem</label>
+        <textarea id="bwSocialMessageText" maxlength="1000" rows="2"
+                  required></textarea>
+        <button type="submit">Enviar mensagem</button>
+        <button type="button" id="bwSocialLoadMessages">Atualizar conversa</button>
+      </form>
+    </section>
+  </div>
+</section>
+<!-- END BW_SOCIAL_UI_V1 -->
+<footer class="bw-classic-footer">
+        BlockWorld Ã‚Â· Plataforma experimental de jogos<br>
+        CatÃƒÂ¡logo demonstrativo local Ã¢â‚¬â€ sem contas ou publicaÃƒÂ§ÃƒÂ£o online nesta versÃƒÂ£o.
+      </footer>
+    <!-- BW_AVATAR_EDITOR_V1 -->
+<section class="bw-avatar-editor" id="bwAvatarEditor" hidden>
+  <h2>Meu Avatar</h2>
+  <p>Personalize seu personagem e salve as mudancas na sua conta.</p>
+  <div class="bw-avatar-layout">
+    <div class="bw-avatar-preview" aria-label="Pre-visualizacao do avatar">
+      <div class="bw-avatar-hair" id="bwAvatarHair"></div>
+      <div class="bw-avatar-head" id="bwAvatarHead"></div>
+      <div class="bw-avatar-body">
+        <div class="bw-avatar-arm" id="bwAvatarArmL"></div>
+        <div class="bw-avatar-shirt" id="bwAvatarShirt"></div>
+        <div class="bw-avatar-arm" id="bwAvatarArmR"></div>
+      </div>
+      <div class="bw-avatar-legs">
+        <div class="bw-avatar-leg" id="bwAvatarLegL"></div>
+        <div class="bw-avatar-leg" id="bwAvatarLegR"></div>
+      </div>
+      <p>Pre-visualizacao 2D</p>
+    </div>
+    <div>
+      <div class="bw-avatar-controls">
+        <label>Cor da pele
+          <input type="color" id="bwAvatarSkin" value="#d9a078">
+        </label>
+        <label>Cor do cabelo
+          <input type="color" id="bwAvatarHairColor" value="#38251c">
+        </label>
+        <label>Cor da camisa
+          <input type="color" id="bwAvatarShirtColor" value="#635bdb">
+        </label>
+        <label>Cor da calca
+          <input type="color" id="bwAvatarPantsColor" value="#27344d">
+        </label>
+        <label>Estampa da camisa
+          <select id="bwAvatarShirtPattern">
+            <option value="solid">Lisa</option>
+            <option value="stripes">Listras</option>
+            <option value="dots">Pontos</option>
+            <option value="checker">Xadrez</option>
+          </select>
+        </label>
+        <label>Estampa da calca
+          <select id="bwAvatarPantsPattern">
+            <option value="solid">Lisa</option>
+            <option value="stripes">Listras</option>
+            <option value="dots">Pontos</option>
+            <option value="checker">Xadrez</option>
+          </select>
+        </label>
+        <label>Imagem da camisa (PNG/JPG/WebP)
+          <input type="file" id="bwAvatarShirtFile" accept="image/png,image/jpeg,image/webp">
+        </label>
+        <label>Imagem da calca (PNG/JPG/WebP)
+          <input type="file" id="bwAvatarPantsFile" accept="image/png,image/jpeg,image/webp">
+        </label>
+      </div>
+      <div class="bw-avatar-actions">
+        <button type="button" id="bwAvatarSave">Salvar avatar</button>
+        <button type="button" id="bwAvatarReset">Restaurar padrao</button>
+        <button type="button" id="bwAvatarClose">Fechar</button>
+      </div>
+      <p class="bw-avatar-status" id="bwAvatarStatus" role="status"></p>
+    </div>
+  </div>
+</section>
+<!-- END BW_AVATAR_EDITOR_V1 -->
+</main>
+  </div>
+
+
+  <div class="app" id="app">
+    <header class="app-topbar">
+      <div class="app-brand">Ã¢â€”Ë† BlockWorld Studio</div>
+      <div class="app-menus">
+        <button type="button" id="menuFile">Arquivo</button>
+        <button type="button" id="menuEdit">Editar</button>
+        <button type="button" id="menuView">Visualizar</button>
+        <button type="button" id="menuHelp">Ajuda</button>
+      </div>
+      <button type="button" id="backToHome">Ã¢â€ Â Plataforma</button>
+    </header>
+
+    <div class="app-toolbar">
+      <button type="button" id="block">Ã°Å¸Â§Â± Bloco</button>
+      <button type="button" id="ball">Ã¢Å¡Âª Esfera</button>
+      <button type="button" id="remove">Ã°Å¸â€”â€˜ Remover ÃƒÂºltimo</button>
+      <button type="button" id="reset">Ã¢â€ Âº Reiniciar cena</button>
+      <button type="button" id="luaRunTop">Ã¢â€“Â¶ Executar Lua</button>
+      <span id="count">Objetos: 0</span>
+    </div>
+
+    <div class="app-main">
+      <aside class="app-panel">
+        <div class="app-panel-title">Ã°Å¸Â§Â° Explorar</div>
+        <div class="app-panel-body side-tools">
+          <button type="button" id="sideBlock">Criar bloco</button>
+          <button type="button" id="sideBall">Criar esfera</button>
+          <button type="button" id="sideReset">Limpar mundo</button>
+          <p style="font-size:12px;line-height:1.5;color:#9aaac3">Clique nos objetos da cena para selecionÃƒÂ¡-los.</p>
+        </div>
+      </aside>
+
+      <main class="app-workspace">
+        <section class="app-panel app-viewport-panel">
+          <div class="app-panel-title">Ã°Å¸Å’Å½ Mundo 3D</div>
+          <div id="viewport"><canvas id="scene"></canvas></div>
+          <div id="status" class="app-status">Preparando o motor 3D...</div>
+        </section>
+
+        <section class="app-panel app-lua-panel">
+          <div class="app-panel-title">Ã°Å¸â€œÅ“ Editor Lua</div>
+          <div class="app-toolbar">
+            <button type="button" id="luaRun">Ã¢â€“Â¶ Executar</button>
+            <button type="button" id="luaClear">Limpar console</button>
+            <button type="button" id="saveLua">Exportar .lua</button>
+          </div>
+          <div class="app-lua-editor">
+            <pre id="lineNumbers">1
+2
+3</pre>
+            <textarea id="luaCode" spellcheck="false">print("OlÃƒÂ¡, BlockWorld!")
+local bloco = criarBloco(0, 1, 0)
+print("Bloco criado com sucesso!")</textarea>
+          </div>
+          <div id="luaConsole">Console Lua pronto.</div>
+        </section>
+      </main>
+
+      <aside class="app-panel">
+        <div class="app-panel-title">Ã¢Å¡â„¢ Propriedades</div>
+        <div class="app-panel-body">
+          <label class="app-prop-label" for="objectName">Objeto selecionado</label>
+          <input id="objectName" placeholder="Nenhum objeto">
+          <p style="font-size:12px;line-height:1.5;color:#9aaac3">Selecione um objeto na cena para visualizar seu nome.</p>
+          <div id="footerStatus" class="app-status">Pronto</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- O editor .app e seu motor 3D devem continuar no projeto existente.
+       renderer.js ÃƒÂ© carregado sem ser substituÃƒÂ­do por esta pÃƒÂ¡gina inicial. -->
+  <!-- O motor 3D e carregado pela Game Engine V2. -->
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+
+      // BLOCKWORLD_LAUNCH_ENGINE_V1
+      async function abrirStudio() {
+        const botoes = [$("bwOpenStudio"), $("bwCreateGame")].filter(Boolean);
+        botoes.forEach(botao => botao.disabled = true);
+
+        try {
+          const resposta = await fetch("/api/launch-engine", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+          });
+          const resultado = await resposta.json();
+
+          if (!resposta.ok || !resultado.ok) {
+            throw new Error(resultado.error || "NÃ£o foi possÃ­vel abrir a engine.");
+          }
+
+          alert("SolicitaÃ§Ã£o enviada! A Game Engine V2 deve abrir em instantes.");
+        } catch (erro) {
+          alert("NÃ£o consegui abrir a Game Engine V2. Confira se o servidor da BlockWorld estÃ¡ rodando em http://localhost:3000. Detalhe: " + erro.message);
+        } finally {
+          botoes.forEach(botao => botao.disabled = false);
+        }
+      }
+
+      function voltarInicio() {
+        document.body.classList.remove("bw-show-studio");
+        window.dispatchEvent(new Event("resize"));
+      }
+
+      $("bwOpenStudio").addEventListener("click", abrirStudio);
+      $("bwCreateGame").addEventListener("click", abrirStudio);
+
+      document.querySelectorAll("[data-bw-page]").forEach(button => {
+        button.addEventListener("click", () => {
+          const page = button.dataset.bwPage;
+          if (page === "studio") {
+            abrirStudio();
+          } else if (page === "home" || page === "games") {
+            voltarInicio();
+            if (page === "games") $("bwGamesSection").scrollIntoView({ behavior: "smooth" });
+            else window.scrollTo({ top: 0, behavior: "smooth" });
+          } else if (page === "avatar") {
+            const editor = $("bwAvatarEditor");
+            editor.hidden = false;
+            editor.scrollIntoView({ behavior: "smooth", block: "start" });
+            if (window.bwLoadAvatar) window.bwLoadAvatar();
+          }
+        });
+      });
+
+      // BW_AVATAR_EDITOR_JS_V1
+(() => {
+  const $a = id => document.getElementById(id);
+  const status = $a('bwAvatarStatus');
+  let shirtImage = '';
+  let pantsImage = '';
+
+  const fields = {
+    skin: 'bwAvatarSkin',
+    hair: 'bwAvatarHairColor',
+    shirt: 'bwAvatarShirtColor',
+    pants: 'bwAvatarPantsColor',
+    shirtPattern: 'bwAvatarShirtPattern',
+    pantsPattern: 'bwAvatarPantsPattern'
+  };
+
+  function drawAvatar() {
+    const skin = $a(fields.skin).value;
+    const hair = $a(fields.hair).value;
+    const shirt = $a(fields.shirt).value;
+    const pants = $a(fields.pants).value;
+
+    $a('bwAvatarHead').style.background = skin;
+    $a('bwAvatarArmL').style.background = skin;
+    $a('bwAvatarArmR').style.background = skin;
+    $a('bwAvatarHair').style.background = hair;
+
+    const shirtEl = $a('bwAvatarShirt');
+    shirtEl.style.backgroundColor = shirt;
+    shirtEl.style.backgroundImage = '';
+    shirtEl.dataset.pattern = $a(fields.shirtPattern).value;
+    if (shirtImage) {
+      shirtEl.style.backgroundImage = `url("${shirtImage}")`;
+      shirtEl.style.backgroundSize = 'cover';
+      shirtEl.style.backgroundPosition = 'center';
+    }
+
+    for (const id of ['bwAvatarLegL', 'bwAvatarLegR']) {
+      const el = $a(id);
+      el.style.backgroundColor = pants;
+      el.style.backgroundImage = '';
+      el.dataset.pattern = $a(fields.pantsPattern).value;
+      if (pantsImage) {
+        el.style.backgroundImage = `url("${pantsImage}")`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+      }
+    }
+  }
+
+  function getAvatar() {
+    const result = {};
+    for (const [key, id] of Object.entries(fields)) result[key] = $a(id).value;
+    result.shirtImage = shirtImage;
+    result.pantsImage = pantsImage;
+    return result;
+  }
+
+  async function loadAvatar() {
+    status.textContent = 'Carregando avatar...';
+    try {
+      const response = await fetch('/api/avatar', { credentials: 'same-origin' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Entre na sua conta primeiro.');
+      const avatar = data.avatar || {};
+      for (const [key, id] of Object.entries(fields)) {
+        if (typeof avatar[key] === 'string') $a(id).value = avatar[key];
+      }
+      shirtImage = avatar.shirtImage || '';
+      pantsImage = avatar.pantsImage || '';
+      drawAvatar();
+      status.textContent = 'Avatar carregado.';
+    } catch (error) {
+      status.textContent = error.message || 'Falha ao carregar avatar.';
+    }
+  }
+
+  async function readImage(input, key) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      status.textContent = 'Escolha uma imagem PNG, JPG ou WebP.';
+      input.value = '';
+      return;
+    }
+    if (file.size > 200000) {
+      status.textContent = 'A imagem deve ter no maximo 200 KB.';
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (key === 'shirtImage') shirtImage = String(reader.result);
+      else pantsImage = String(reader.result);
+      drawAvatar();
+      status.textContent = 'Imagem carregada. Clique em Salvar avatar.';
+    };
+    reader.onerror = () => { status.textContent = 'Nao foi possivel ler a imagem.'; };
+    reader.readAsDataURL(file);
+  }
+
+  for (const id of Object.values(fields)) {
+    $a(id).addEventListener('input', drawAvatar);
+    $a(id).addEventListener('change', drawAvatar);
+  }
+
+  $a('bwAvatarShirtFile').addEventListener('change', event =>
+    readImage(event.target, 'shirtImage'));
+  $a('bwAvatarPantsFile').addEventListener('change', event =>
+    readImage(event.target, 'pantsImage'));
+
+  $a('bwAvatarSave').addEventListener('click', async () => {
+    status.textContent = 'Salvando...';
+    try {
+      const response = await fetch('/api/avatar', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getAvatar())
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Falha ao salvar.');
+      status.textContent = 'Avatar salvo na sua conta!';
+    } catch (error) {
+      status.textContent = error.message || 'Falha ao salvar avatar.';
+    }
+  });
+
+  $a('bwAvatarReset').addEventListener('click', () => {
+    $a(fields.skin).value = '#d9a078';
+    $a(fields.hair).value = '#38251c';
+    $a(fields.shirt).value = '#635bdb';
+    $a(fields.pants).value = '#27344d';
+    $a(fields.shirtPattern).value = 'solid';
+    $a(fields.pantsPattern).value = 'solid';
+    shirtImage = '';
+    pantsImage = '';
+    $a('bwAvatarShirtFile').value = '';
+    $a('bwAvatarPantsFile').value = '';
+    drawAvatar();
+    status.textContent = 'Padrao restaurado. Salve para confirmar.';
+  });
+
+  $a('bwAvatarClose').addEventListener('click', () => {
+    $a('bwAvatarEditor').hidden = true;
+  });
+
+  window.bwLoadAvatar = loadAvatar;
+  drawAvatar();
+})();
+// END BW_AVATAR_EDITOR_JS_V1
+// BLOCKWORLD_CATALOG_API_V1
+      const catalogo = $("bwGameCatalog");
+      const mensagemSemJogos = $("bwNoGames");
+      const campoBusca = $("bwSearchInput");
+
+      function filtrarJogos() {
+        const consulta = campoBusca.value.trim().toLocaleLowerCase("pt-BR");
+        const categoria = $("bwCatalogCategory")?.value || "all";
+        let encontrados = 0;
+
+        catalogo.querySelectorAll(".bw-classic-game").forEach(card => {
+          const texto = (card.innerText + " " + (card.dataset.search || "")).toLocaleLowerCase("pt-BR");
+          const correspondeBusca = texto.includes(consulta);
+          const correspondeCategoria = categoria === "all" || card.dataset.category === categoria;
+          card.hidden = !(correspondeBusca && correspondeCategoria);
+          if (!card.hidden) encontrados++;
+        });
+        mensagemSemJogos.hidden = encontrados !== 0;
+      }
+
+      $("bwSearch").addEventListener("submit", event => {
+        event.preventDefault();
+        filtrarJogos();
+      });
+
+      campoBusca.addEventListener("input", filtrarJogos);
+
+      catalogo.addEventListener("click", async event => {
+        const botao = event.target.closest("[data-bw-play-url], [data-bw-play]");
+        if (!botao) return;
+
+        const destino = botao.dataset.bwPlayUrl;
+        if (destino) {
+          window.location.href = destino;
+        } else {
+          alert('"' + (botao.dataset.bwPlay || "Jogo demonstrativo") +
+            '" e uma demonstracao. Crie e publique um jogo para jogar aqui.');
+        }
+      });
+
+      async function carregarJogosPublicados() {
+        try {
+          const resposta = await fetch("/api/games", {
+            headers: { "Accept": "application/json" },
+            cache: "no-store"
+          });
+          if (!resposta.ok) throw new Error("HTTP " + resposta.status);
+
+          const dados = await resposta.json();
+          const jogos = Array.isArray(dados.games) ? dados.games : [];
+          if (jogos.length === 0) {
+            configurarFiltrosCatalogo();
+            return;
+          }
+
+          catalogo.replaceChildren();
+
+          for (const jogo of jogos) {
+            if (!jogo || typeof jogo.title !== "string" || typeof jogo.id !== "string") continue;
+
+            const card = document.createElement("article");
+            card.className = "bw-classic-game";
+            card.dataset.category = jogo.category || "Outro";
+            card.dataset.createdAt = String(Number(jogo.createdAt) || 0);
+            card.dataset.visits = String(Number(jogo.visits) || 0);
+            card.dataset.search = [jogo.title, jogo.description, jogo.category, jogo.creator].filter(Boolean).join(" ");
+
+            const arte = document.createElement("div");
+            arte.className = "bw-classic-game-art";
+            arte.setAttribute("aria-hidden", "true");
+            arte.textContent = typeof jogo.icon === "string" ? jogo.icon : "🎮";
+
+            const corpo = document.createElement("div");
+            corpo.className = "bw-classic-game-body";
+
+            const titulo = document.createElement("h3");
+            titulo.textContent = jogo.title;
+
+            const descricao = document.createElement("p");
+            descricao.textContent = jogo.description || "Jogo publicado na BlockWorld.";
+
+            const detalhes = document.createElement("p");
+            detalhes.className = "bw-classic-muted";
+            detalhes.textContent = (jogo.category || "Outro") + " · Criado por " + (jogo.creator || "Jogador");
+
+            const visitas = document.createElement("p");
+            visitas.className = "bw-game-visits";
+            visitas.textContent = "👁 " + (Number(jogo.visits) || 0).toLocaleString("pt-BR") + " visitas";
+
+            const botao = document.createElement("button");
+            botao.type = "button";
+            botao.textContent = "Jogar";
+            const destino = jogo.url || ("/play/" + encodeURIComponent(jogo.id));
+            if (destino.startsWith("/play/")) {
+              botao.dataset.bwPlayUrl = destino;
+              botao.dataset.bwGameId = jogo.id;
+            } else if (/^https:\/\//i.test(destino)) {
+              botao.dataset.bwExternalUrl = destino;
+              botao.dataset.bwGameId = jogo.id;
+            } else {
+              botao.disabled = true;
+              botao.textContent = "Indisponível";
+            }
+
+            corpo.append(titulo, descricao, detalhes, visitas, botao);
+            card.append(arte, corpo);
+            catalogo.appendChild(card);
+          }
+
+          const secao = document.querySelector(".bw-classic-section h2");
+          if (secao) secao.textContent = "Jogos publicados";
+          configurarFiltrosCatalogo();
+          filtrarJogos();
+        } catch (erro) {
+          console.error("[BlockWorld] Não foi possível carregar o catálogo:", erro);
+          configurarFiltrosCatalogo();
+        }
+      }
+
+      function configurarFiltrosCatalogo() {
+        const ordenar = $("bwCatalogSort");
+        const categoria = $("bwCatalogCategory");
+        if (ordenar && !ordenar.dataset.bound) {
+          ordenar.dataset.bound = "1";
+          ordenar.addEventListener("change", ordenarCatalogo);
+        }
+        if (categoria && !categoria.dataset.bound) {
+          categoria.dataset.bound = "1";
+          categoria.addEventListener("change", filtrarJogos);
+        }
+      }
+
+      function ordenarCatalogo() {
+        const ordenar = $("bwCatalogSort");
+        if (!ordenar) return;
+        const cards = Array.from(catalogo.querySelectorAll(".bw-classic-game"));
+        const modo = ordenar.value;
+        cards.sort((a, b) => {
+          if (modo === "popular") return Number(b.dataset.visits || 0) - Number(a.dataset.visits || 0);
+          if (modo === "category") {
+            const comparacao = (a.dataset.category || "").localeCompare(b.dataset.category || "", "pt-BR");
+            if (comparacao) return comparacao;
+          }
+          return Number(b.dataset.createdAt || 0) - Number(a.dataset.createdAt || 0);
+        });
+        cards.forEach(card => catalogo.appendChild(card));
+        filtrarJogos();
+      }
+
+      carregarJogosPublicados();
+      $("bwProfile").addEventListener("click", () => {
+        $("bwProfileMessage").textContent = "Jogador local Ã‚Â· Perfil demonstrativo";
+      });
+
+      $("bwAbout").addEventListener("click", () => {
+        alert("BlockWorld Studio\nPlataforma experimental de criaÃƒÂ§ÃƒÂ£o de jogos.\nO catÃƒÂ¡logo atual ÃƒÂ© demonstrativo e local.");
+      });
+
+      // Suporte seguro aos controles antigos, caso estejam presentes no editor.
+      function clicarSeExistir(origem, destino) {
+        const source = $(origem);
+        const target = $(destino);
+        if (source && target) source.addEventListener("click", () => target.click());
+      }
+      clicarSeExistir("sideBlock", "block");
+      clicarSeExistir("sideBall", "ball");
+      clicarSeExistir("sideReset", "reset");
+      clicarSeExistir("luaRunTop", "luaRun");
+
+      const code = $("luaCode");
+      const lines = $("lineNumbers");
+      if (code && lines) {
+        const updateLines = () => {
+          lines.textContent = Array.from(
+            { length: Math.max(1, code.value.split("\n").length) },
+            (_, i) => i + 1
+          ).join("\n");
+        };
+        code.addEventListener("input", updateLines);
+        code.addEventListener("scroll", () => { lines.scrollTop = code.scrollTop; });
+        code.addEventListener("keydown", event => {
+          if (event.key === "Tab") {
+            event.preventDefault();
+            code.setRangeText("  ", code.selectionStart, code.selectionEnd, "end");
+            updateLines();
+          }
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            if ($("luaRun")) $("luaRun").click();
+          }
+        });
+        updateLines();
+      }
+
+      const saveLua = $("saveLua");
+      if (saveLua && code) {
+        saveLua.addEventListener("click", () => {
+          const url = URL.createObjectURL(new Blob([code.value], {
+            type: "text/plain;charset=utf-8"
+          }));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "Script.lua";
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          if ($("footerStatus")) $("footerStatus").textContent = "Script exportado";
+        });
+      }
+
+      const menuFile = $("menuFile");
+      if (menuFile && saveLua) menuFile.addEventListener("click", () => saveLua.click());
+      const menuEdit = $("menuEdit");
+      if (menuEdit && code) menuEdit.addEventListener("click", () => code.focus());
+      const menuView = $("menuView");
+      if (menuView && $("viewport")) {
+        menuView.addEventListener("click", () => $("viewport").scrollIntoView({ block: "nearest" }));
+      }
+      const menuHelp = $("menuHelp");
+      if (menuHelp) {
+        menuHelp.addEventListener("click", () => alert(
+          "BlockWorld Studio\n\nCrie objetos 3D e execute scripts Lua.\nAtalho: Ctrl + Enter para executar Lua."
+        ));
+      }
+
+      const backToHome = $("backToHome");
+      if (backToHome) backToHome.addEventListener("click", () => {
+        document.body.classList.remove("bw-show-studio");
+        window.dispatchEvent(new Event("resize"));
+      });
+
+      const clearConsole = $("luaClear");
+      if (clearConsole && $("luaConsole")) {
+        clearConsole.addEventListener("click", () => { $("luaConsole").textContent = ""; });
+      }
+
+      const status = $("status");
+      const footerStatus = $("footerStatus");
+      if (status && footerStatus) {
+        new MutationObserver(() => {
+          footerStatus.textContent = status.textContent || "Pronto";
+        }).observe(status, { childList: true, characterData: true, subtree: true });
+      }
+    })();
+  </script>
+
+<!-- BW_ACCOUNT_WIDGET_V1 -->
+<style>
+#bwAccountWidget{position:fixed;right:18px;bottom:18px;z-index:99999;display:flex;align-items:center;gap:10px;padding:10px 13px;background:#11192bf2;border:1px solid #34415e;border-radius:13px;box-shadow:0 8px 30px #0005;color:#eef2ff;font:13px system-ui,sans-serif}
+#bwAccountWidget a,#bwAccountWidget button{color:#fff;text-decoration:none;border:0;border-radius:8px;padding:8px 10px;background:#635bdb;cursor:pointer;font:inherit}
+#bwAccountWidget .bw-muted{color:#9ca9c5}
+@media(max-width:600px){#bwAccountWidget{right:8px;bottom:8px;left:8px;justify-content:center;flex-wrap:wrap}}
+    .bw-catalog-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0 16px; }
+    .bw-catalog-controls label { font-size:12px; color:var(--muted); }
+    .bw-catalog-controls select { max-width:100%; padding:9px; border:1px solid var(--border); border-radius:5px; background:var(--panel,#fff); color:inherit; }
+    .bw-game-visits { margin:0 0 10px; color:var(--muted); font-size:12px; }
+/* BW_SOCIAL_UI_V1 */
+.bw-social-page { margin:20px 0; padding:22px; border:1px solid var(--border); border-radius:12px; background:var(--panel, #151b29); color:inherit; }
+.bw-social-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+.bw-social-card { min-width:0; padding:15px; border:1px solid var(--border); border-radius:9px; }
+.bw-social-page input,.bw-social-page textarea { box-sizing:border-box; width:100%; padding:10px; margin:5px 0 10px; border:1px solid var(--border); border-radius:6px; background:var(--panel,#101522); color:inherit; }
+.bw-social-page button { margin:4px 4px 4px 0; padding:8px 12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; background:var(--panel,#202a3d); color:inherit; }
+.bw-social-item { padding:10px 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+.bw-social-status { min-height:22px; color:var(--muted); white-space:pre-wrap; }
+.bw-social-messages { max-height:260px; overflow-y:auto; padding:8px; border:1px solid var(--border); border-radius:6px; }
+.bw-social-message { padding:8px; margin:5px 0; border-radius:6px; background:var(--panel,#202a3d); overflow-wrap:anywhere; }
+.bw-social-muted { color:var(--muted); font-size:13px; }
+</style>
+<div id="bwAccountWidget"><span class="bw-muted" id="bwAccountStatus">Conta</span><a href="/login.html" id="bwAccountLink">Entrar / Cadastrar</a><button id="bwLogout" hidden>Sair</button></div>
+<script>
+(async function(){
+ const status=document.getElementById('bwAccountStatus');
+ const link=document.getElementById('bwAccountLink');
+ const logout=document.getElementById('bwLogout');
+ try{
+   const response=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});
+   const data=await response.json();
+   if(data.user){
+     status.textContent='OlÃ¡, '+data.user.username;
+     link.textContent='Minha conta';
+     link.href='/login.html';
+     logout.hidden=false;
+   }else{
+     status.textContent='VocÃª nÃ£o estÃ¡ conectado';
+   }
+ }catch{
+   status.textContent='Conta BlockWorld';
+ }
+ logout.addEventListener('click',async()=>{
+   logout.disabled=true;
+   try{
+     await fetch('/api/logout',{method:'POST',credentials:'same-origin'});
+     location.href='/login.html';
+   }catch{
+     logout.disabled=false;
+     status.textContent='NÃ£o foi possÃ­vel sair. Tente novamente.';
+   }
+ });
+})();
+</script>
+<script>
+/* BW_SOCIAL_UI_V1 */
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const panel = $("bwSocialPage");
+  if (!panel) return;
+
+  let currentUserId = "";
+  let currentUsername = "";
+
+  const status = text => { $("bwSocialStatus").textContent = text || ""; };
+  const asObject = data => data && typeof data === "object" ? data : {};
+  const userOf = item => asObject(item && (item.user || item.profile || item));
+  const userId = item => String(userOf(item).id || item.userId || item.fromUserId || "");
+  const username = item => String(userOf(item).username || item.username || "Jogador");
+  const button = (label, action) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", action);
+    return b;
+  };
+  const line = (container, text) => {
+    const el = document.createElement("div");
+    el.className = "bw-social-item";
+    el.textContent = text;
+    container.appendChild(el);
+    return el;
+  };
+  const empty = (container, text) => {
+    container.replaceChildren();
+    line(container, text);
+  };
+
+  async function api(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers || {})
+      }
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (!response.ok) {
+      throw new Error(data.error || data.message ||
+        ("A solicitação falhou (HTTP " + response.status + ")."));
+    }
+    return data;
+  }
+
+  async function openProfile(name) {
+    const result = $("bwSocialSearchResult");
+    empty(result, "Consultando perfil...");
+    try {
+      const data = await api("/api/social/profile/" + encodeURIComponent(name));
+      const p = asObject(data.profile || data.user || data);
+      result.replaceChildren();
+      const heading = document.createElement("h4");
+      heading.textContent = p.username || name;
+      result.appendChild(heading);
+      line(result, p.description || "Este jogador ainda não escreveu uma descrição.");
+      if (p.avatar && typeof p.avatar === "object") {
+        line(result, "Este perfil possui um avatar personalizado.");
+      }
+
+      const id = String(p.id || "");
+      if (id && id !== currentUserId) {
+        result.appendChild(button("Enviar pedido de amizade", async () => {
+          try {
+            await api("/api/social/requests", {
+              method: "POST",
+              body: JSON.stringify({ username: p.username || name })
+            });
+            status("Pedido de amizade enviado.");
+            await refresh();
+          } catch (e) { status(e.message); }
+        }));
+      }
+    } catch (e) {
+      empty(result, e.message);
+    }
+  }
+
+  async function refresh() {
+    try {
+      const [me, friendData, requestData] = await Promise.all([
+        api("/api/me"),
+        api("/api/social/friends"),
+        api("/api/social/requests")
+      ]);
+
+      const meUser = asObject(me.user || me);
+      currentUserId = String(meUser.id || "");
+      currentUsername = String(meUser.username || "");
+      $("bwSocialMyName").textContent = currentUsername
+        ? "Conectado como " + currentUsername
+        : "Conta autenticada";
+      $("bwSocialDescription").value = String(meUser.description || "");
+
+      const friends = Array.isArray(friendData.friends) ? friendData.friends : [];
+      const friendList = $("bwSocialFriends");
+      friendList.replaceChildren();
+
+      if (!friends.length) {
+        line(friendList, "Você ainda não tem amigos.");
+      } else {
+        friends.forEach(item => {
+          const u = userOf(item);
+          const id = userId(item);
+          const row = document.createElement("div");
+          row.className = "bw-social-item";
+          const name = document.createElement("strong");
+          name.textContent = username(item);
+          row.appendChild(name);
+          row.appendChild(document.createTextNode(" "));
+          row.appendChild(button("Conversar", () => {
+            $("bwSocialChatFriend").value = id;
+            loadMessages();
+          }));
+          row.appendChild(button("Ver perfil", () => openProfile(username(item))));
+          row.appendChild(button("Remover amigo", async () => {
+            if (!id || !confirm("Remover " + username(item) + " dos amigos?")) return;
+            try {
+              await api("/api/social/friends/" + encodeURIComponent(id), { method: "DELETE" });
+              status("Amigo removido.");
+              await refresh();
+            } catch (e) { status(e.message); }
+          }));
+          friendList.appendChild(row);
+        });
+      }
+
+      const requests = asObject(requestData);
+      const incoming = Array.isArray(requests.incoming) ? requests.incoming : [];
+      const outgoing = Array.isArray(requests.outgoing) ? requests.outgoing : [];
+
+      const incomingBox = $("bwSocialIncoming");
+      incomingBox.replaceChildren();
+      if (!incoming.length) line(incomingBox, "Nenhum pedido recebido.");
+      incoming.forEach(item => {
+        const id = userId(item);
+        const row = line(incomingBox, username(item) + " enviou um pedido.");
+        row.appendChild(document.createTextNode(" "));
+        row.appendChild(button("Aceitar", async () => {
+          try {
+            await api("/api/social/requests/" + encodeURIComponent(id) + "/accept", {
+              method: "POST", body: JSON.stringify({})
+            });
+            status("Pedido aceito.");
+            await refresh();
+          } catch (e) { status(e.message); }
+        }));
+        row.appendChild(button("Recusar", async () => {
+          try {
+            await api("/api/social/requests/" + encodeURIComponent(id), { method: "DELETE" });
+            status("Pedido recusado.");
+            await refresh();
+          } catch (e) { status(e.message); }
+        }));
+      });
+
+      const outgoingBox = $("bwSocialOutgoing");
+      outgoingBox.replaceChildren();
+      if (!outgoing.length) line(outgoingBox, "Nenhum pedido enviado.");
+      outgoing.forEach(item => line(outgoingBox, "Pedido enviado para " + username(item) + "."));
+
+      status("Listas atualizadas.");
+    } catch (e) {
+      status(e.message + " Confira se você está conectado.");
+    }
+  }
+
+  async function loadMessages() {
+    const id = $("bwSocialChatFriend").value.trim();
+    if (!id) {
+      empty($("bwSocialMessages"), "Selecione um amigo primeiro.");
+      return;
+    }
+    try {
+      const data = await api("/api/social/messages/" + encodeURIComponent(id));
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      const box = $("bwSocialMessages");
+      box.replaceChildren();
+      if (!messages.length) line(box, "Nenhuma mensagem nesta conversa.");
+      messages.forEach(msg => {
+        const sender = String(msg.username || msg.senderUsername ||
+          (msg.senderId === currentUserId ? currentUsername : "Jogador"));
+        const content = String(msg.message || msg.text || "");
+        line(box, sender + ": " + content);
+      });
+      box.scrollTop = box.scrollHeight;
+    } catch (e) {
+      empty($("bwSocialMessages"), e.message);
+    }
+  }
+
+  $("bwSocialSearchForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const name = $("bwSocialSearchName").value.trim();
+    if (!name) return;
+    await openProfile(name);
+  });
+
+  $("bwSocialSaveProfile").addEventListener("click", async () => {
+    try {
+      await api("/api/social/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ description: $("bwSocialDescription").value })
+      });
+      status("Descrição salva.");
+    } catch (e) { status(e.message); }
+  });
+
+  $("bwSocialRefresh").addEventListener("click", refresh);
+  $("bwSocialLoadMessages").addEventListener("click", loadMessages);
+
+  $("bwSocialMessageForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const id = $("bwSocialChatFriend").value.trim();
+    const message = $("bwSocialMessageText").value.trim();
+    if (!id || !message) {
+      status("Selecione um amigo e escreva uma mensagem.");
+      return;
+    }
+    try {
+      await api("/api/social/messages/" + encodeURIComponent(id), {
+        method: "POST",
+        body: JSON.stringify({ message })
+      });
+      $("bwSocialMessageText").value = "";
+      status("Mensagem enviada.");
+      await loadMessages();
+    } catch (e) { status(e.message); }
+  });
+
+  document.querySelectorAll('[data-bw-page="social"]').forEach(b => {
+    b.addEventListener("click", () => {
+      panel.hidden = false;
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      refresh();
+    });
+  });
+
+  // O perfil da conta é carregado quando a comunidade é aberta.
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

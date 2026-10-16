@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jogar — BlockWorld</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d18;color:#eef2ff;font:15px system-ui,sans-serif}
+header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#11192b;border-bottom:1px solid #26334c}
+a{color:#b7b2ff}
+#viewport{width:100%;height:calc(100vh - 112px);min-height:360px}
+canvas{display:block}
+footer{padding:10px 18px;color:#9ca9c5;font-size:12px}
+#message{padding:16px}
+</style>
+</head>
+<body>
+<header><strong>◈ BlockWorld</strong><a href="/">Voltar à plataforma</a></header>
+<div id="message">Carregando jogo...</div>
+<div id="viewport"></div>
+<footer>Jogo publicado na BlockWorld · Use o mouse para girar a câmera e a roda para aproximar.</footer>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/vendor/three/build/three.module.js",
+    "three/addons/": "/vendor/three/examples/jsm/"
+  }
+}
+</script>
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/play.js"></script>
+<script src="/game-menu.js" defer></script>
+</body>
+</html>

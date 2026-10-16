@@ -1,0 +1,1053 @@
+
+import * as THREE from '/vendor/three/build/three.module.js';
+
+'use strict';
+
+// ============================================================
+// BLOCKWORLD - CLIENTE 3D, MULTIPLAYER E ANIMAÇÕES
+// Conexão automática via Socket.IO.
+// Animações: caminhada e respiração.
+// ============================================================
+
+// -------------------- CONFIGURAÇÕES --------------------
+
+const message = document.getElementById('message');
+const viewport = document.getElementById('viewport');
+
+const pathParts = location.pathname.split('/').filter(Boolean);
+const gameId = pathParts[pathParts.length - 1] || '';
+
+const MAX_PLAYERS = 20;
+const MOVE_SPEED = 5;
+const MOVE_INTERVAL = 0.07;
+
+const defaultColors = {
+  skin: '#d9a078',
+  hair: '#38251c',
+  shirt: '#635bdb',
+  pants: '#27344d'
+};
+
+let colors = { ...defaultColors };
+
+let socket = null;
+let myId = null;
+let roomCode = '';
+
+let scene = null;
+let camera = null;
+let renderer = null;
+let myPlayer = null;
+
+let moveTimer = 0;
+let connecting = false;
+let animationStarted = false;
+let lastFrame = 0;
+
+const players = new Map();
+const keys = new Set();
+
+if (!message || !viewport) {
+  throw new Error('A página precisa conter #message e #viewport.');
+}
+
+// ============================================================
+// INTERFACE
+// ============================================================
+
+const panel = document.createElement('section');
+panel.id = 'bwMultiplayerPanel';
+
+panel.style.cssText = [
+  'margin:12px',
+  'padding:14px',
+  'background:#11192b',
+  'border:1px solid #26334c',
+  'border-radius:14px',
+  'color:#eef2ff',
+  'font:14px system-ui',
+  'display:flex',
+  'gap:12px',
+  'flex-wrap:wrap',
+  'align-items:center'
+].join(';');
+
+panel.innerHTML = [
+  '<strong>BlockWorld Multiplayer</strong>',
+  '<span id="bwRoomStatus">Iniciando...</span>',
+  '<div style="flex-basis:100%;height:1px;background:#26344f"></div>',
+  '<strong>Personalizar avatar</strong>',
+  '<label>Pele <input type="color" id="bwSkin" value="#d9a078"></label>',
+  '<label>Cabelo <input type="color" id="bwHair" value="#38251c"></label>',
+  '<label>Camisa <input type="color" id="bwShirt" value="#635bdb"></label>',
+  '<label>Calça <input type="color" id="bwPants" value="#27344d"></label>',
+  '<button id="bwSaveAvatar" type="button">Salvar avatar</button>',
+  '<span style="color:#9ca9c5">WASD ou setas para mover.</span>'
+].join('');
+
+panel.querySelectorAll('button').forEach(function (button) {
+  button.style.cssText =
+    'background:#635bdb;color:white;border:0;' +
+    'border-radius:8px;padding:9px 12px;cursor:pointer;';
+});
+
+panel.querySelectorAll('label').forEach(function (label) {
+  label.style.cssText =
+    'display:flex;gap:6px;align-items:center;';
+});
+
+if (viewport.parentNode) {
+  viewport.parentNode.insertBefore(panel, viewport);
+} else {
+  document.body.appendChild(panel);
+}
+
+const roomStatus = document.getElementById('bwRoomStatus');
+const saveAvatarButton = document.getElementById('bwSaveAvatar');
+
+function setStatus(text, isError = false) {
+  if (!roomStatus) return;
+
+  roomStatus.textContent = String(text);
+  roomStatus.style.color = isError ? '#ff9999' : '#a9e8bf';
+}
+
+function setMessage(text, isError = false) {
+  if (!message) return;
+
+  message.textContent = String(text);
+  message.style.color = isError ? '#ffb4b4' : '';
+}
+
+// ============================================================
+// PERSONALIZAÇÃO DO AVATAR
+// ============================================================
+
+function readColors() {
+  Object.keys(colors).forEach(function (key) {
+    const id = 'bw' + key.charAt(0).toUpperCase() + key.slice(1);
+    const input = document.getElementById(id);
+
+    if (input && /^#[0-9a-f]{6}$/i.test(input.value)) {
+      colors[key] = input.value;
+    }
+  });
+
+  return { ...colors };
+}
+
+function applyColorInputs(avatar) {
+  if (!avatar || typeof avatar !== 'object') return;
+
+  Object.keys(colors).forEach(function (key) {
+    if (!/^#[0-9a-f]{6}$/i.test(avatar[key] || '')) return;
+
+    colors[key] = avatar[key];
+
+    const id = 'bw' + key.charAt(0).toUpperCase() + key.slice(1);
+    const input = document.getElementById(id);
+
+    if (input) input.value = avatar[key];
+  });
+}
+
+Object.keys(colors).forEach(function (key) {
+  const id = 'bw' + key.charAt(0).toUpperCase() + key.slice(1);
+  const input = document.getElementById(id);
+
+  if (!input) return;
+
+  input.addEventListener('input', function () {
+    readColors();
+
+    if (myPlayer) {
+      applyAvatar(myPlayer, colors);
+    }
+  });
+});
+
+// ============================================================
+// NOME SOBRE A CABEÇA DO JOGADOR
+// ============================================================
+
+function makeLabel(username) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'rgba(8,13,24,0.85)';
+  ctx.fillRect(8, 8, 496, 112);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.fillText(
+    String(username || 'Jogador').slice(0, 24),
+    256,
+    64
+  );
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false
+  });
+
+  const label = new THREE.Sprite(material);
+
+  label.scale.set(2.5, 0.62, 1);
+  label.position.y = 2.8;
+
+  return label;
+}
+
+// ============================================================
+// CONSTRUÇÃO DOS PERSONAGENS
+// ============================================================
+
+function buildAvatar(player) {
+  const group = new THREE.Group();
+
+  const materials = {
+    skin: new THREE.MeshStandardMaterial({ color: colors.skin }),
+    hair: new THREE.MeshStandardMaterial({ color: colors.hair }),
+    shirt: new THREE.MeshStandardMaterial({ color: colors.shirt }),
+    pants: new THREE.MeshStandardMaterial({ color: colors.pants })
+  };
+
+  function addBox(parent, w, h, d, material, x, y, z) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      material
+    );
+
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    parent.add(mesh);
+    return mesh;
+  }
+
+  // Tronco
+  const torso = addBox(
+    group,
+    0.8, 0.9, 0.4,
+    materials.shirt,
+    0, 1.25, 0
+  );
+
+  // Cabeça
+  const head = new THREE.Group();
+  head.position.set(0, 1.75, 0);
+  group.add(head);
+
+  addBox(
+    head,
+    0.58, 0.58, 0.58,
+    materials.skin,
+    0, 0.27, 0
+  );
+
+  // Cabelo
+  addBox(
+    head,
+    0.62, 0.2, 0.62,
+    materials.hair,
+    0, 0.63, 0
+  );
+
+  // Braço esquerdo: pivô no ombro
+  const leftArm = new THREE.Group();
+  leftArm.position.set(-0.53, 1.6, 0);
+  group.add(leftArm);
+
+  addBox(
+    leftArm,
+    0.24, 0.7, 0.3,
+    materials.skin,
+    0, -0.35, 0
+  );
+
+  // Braço direito
+  const rightArm = new THREE.Group();
+  rightArm.position.set(0.53, 1.6, 0);
+  group.add(rightArm);
+
+  addBox(
+    rightArm,
+    0.24, 0.7, 0.3,
+    materials.skin,
+    0, -0.35, 0
+  );
+
+  // Perna esquerda: pivô no quadril
+  const leftLeg = new THREE.Group();
+  leftLeg.position.set(-0.23, 0.75, 0);
+  group.add(leftLeg);
+
+  addBox(
+    leftLeg,
+    0.3, 0.7, 0.34,
+    materials.pants,
+    0, -0.35, 0
+  );
+
+  // Perna direita
+  const rightLeg = new THREE.Group();
+  rightLeg.position.set(0.23, 0.75, 0);
+  group.add(rightLeg);
+
+  addBox(
+    rightLeg,
+    0.3, 0.7, 0.34,
+    materials.pants,
+    0, -0.35, 0
+  );
+
+  // Dados usados pelo sistema de animação
+  group.userData.materials = materials;
+
+  group.userData.parts = {
+    torso,
+    head,
+    leftArm,
+    rightArm,
+    leftLeg,
+    rightLeg
+  };
+
+  group.userData.playerId = player.id;
+  group.userData.animTime = Math.random() * Math.PI * 2;
+  group.userData.motionTimer = 0;
+  group.userData.lastX = 0;
+  group.userData.lastZ = 0;
+  group.userData.initializedAnimation = false;
+
+  group.add(makeLabel(player.username));
+
+  applyAvatar(group, player.avatar || colors);
+
+  return group;
+}
+
+// ============================================================
+// ANIMAÇÕES DOS PERSONAGENS
+// ============================================================
+
+function animateAvatar(group, delta) {
+  if (!group || !group.userData.parts) return;
+
+  const data = group.userData;
+  const parts = data.parts;
+
+  // Inicializa a posição usada para detectar movimento.
+  if (!data.initializedAnimation) {
+    data.lastX = group.position.x;
+    data.lastZ = group.position.z;
+    data.initializedAnimation = true;
+  }
+
+  // Verifica se o personagem mudou de posição.
+  const dx = group.position.x - data.lastX;
+  const dz = group.position.z - data.lastZ;
+  const distance = Math.hypot(dx, dz);
+
+  data.lastX = group.position.x;
+  data.lastZ = group.position.z;
+
+  if (distance > 0.001) {
+    data.motionTimer = 0.2;
+  } else {
+    data.motionTimer = Math.max(
+      0,
+      (data.motionTimer || 0) - delta
+    );
+  }
+
+  const moving = data.motionTimer > 0;
+
+  // A caminhada é mais rápida que a respiração.
+  data.animTime += delta * (moving ? 11 : 2);
+
+  const swing = moving
+    ? Math.sin(data.animTime) * 0.65
+    : 0;
+
+  // Braços alternados.
+  parts.leftArm.rotation.x = swing;
+  parts.rightArm.rotation.x = -swing;
+
+  // Pernas alternadas.
+  parts.leftLeg.rotation.x = -swing;
+  parts.rightLeg.rotation.x = swing;
+
+  // Respiração suave.
+  const breathing = Math.sin(data.animTime) * 0.012;
+
+  parts.torso.scale.y = 1 + breathing;
+  parts.head.position.y = 1.75 + breathing * 0.7;
+
+  // Inclinação sutil ao caminhar.
+  parts.torso.rotation.x = moving
+    ? Math.abs(swing) * 0.035
+    : 0;
+}
+
+function applyAvatar(group, avatar) {
+  if (!group || !group.userData.materials || !avatar) return;
+
+  const materials = group.userData.materials;
+
+  Object.keys(materials).forEach(function (key) {
+    if (/^#[0-9a-f]{6}$/i.test(avatar[key] || '')) {
+      materials[key].color.set(avatar[key]);
+    }
+  });
+}
+
+// ============================================================
+// JOGADORES DO MULTIPLAYER
+// ============================================================
+
+function upsertPlayer(player) {
+  if (!scene || !player || !player.id) return;
+
+  let group = players.get(player.id);
+
+  if (!group) {
+    group = buildAvatar(player);
+    scene.add(group);
+    players.set(player.id, group);
+  }
+
+  group.userData.playerId = player.id;
+  group.userData.username = String(player.username || "Jogador");
+  window.dispatchEvent(new CustomEvent("bw:playerschanged"));
+
+  if (Number.isFinite(player.x)) {
+    group.position.x = player.x;
+  }
+
+  if (Number.isFinite(player.z)) {
+    group.position.z = player.z;
+  }
+
+  if (Number.isFinite(player.rotation)) {
+    group.rotation.y = player.rotation;
+  }
+
+  if (player.avatar) {
+    applyAvatar(group, player.avatar);
+  }
+
+  if (player.id === myId) {
+    myPlayer = group;
+  }
+}
+
+function removePlayer(id) {
+  if (id && typeof id === 'object') {
+    id = id.id;
+  }
+
+  const group = players.get(id);
+  if (!group) return;
+
+  if (scene) {
+    scene.remove(group);
+  }
+
+  group.traverse(function (object) {
+    if (object.geometry) {
+      object.geometry.dispose();
+    }
+
+    if (object.material) {
+      const list = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+
+      list.forEach(function (material) {
+        if (material.map) {
+          material.map.dispose();
+        }
+
+        material.dispose();
+      });
+    }
+  });
+
+  players.delete(id);
+
+  if (id === myId) {
+    myPlayer = null;
+  }
+}
+
+function clearPlayers() {
+  Array.from(players.keys()).forEach(removePlayer);
+
+  myPlayer = null;
+  roomCode = '';
+}
+
+// ============================================================
+// MULTIPLAYER - CONEXÃO AUTOMÁTICA
+// ============================================================
+
+function ensureSocket() {
+  if (!gameId || gameId === 'play') {
+    setStatus('Não foi possível identificar o jogo.', true);
+    return;
+  }
+
+  if (socket) {
+    if (socket.connected) {
+      socket.emit('findMatch', { gameId });
+    } else if (!connecting) {
+      connecting = true;
+      socket.connect();
+    }
+
+    return;
+  }
+
+  if (typeof window.io !== 'function') {
+    setStatus('Socket.IO não carregou. Confira o servidor.', true);
+    return;
+  }
+
+  connecting = true;
+  setStatus('Conectando ao servidor...');
+
+  socket = window.io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    timeout: 10000
+  });
+
+  socket.on('connect', function () {
+    connecting = false;
+    myId = socket.id;
+
+    setStatus('Conectado. Entrando no multiplayer...');
+    socket.emit('findMatch', { gameId });
+  });
+
+  socket.on('connect_error', function (error) {
+    connecting = false;
+
+    setStatus(
+      'Erro de conexão: ' +
+      (error && error.message
+        ? error.message
+        : 'servidor indisponível'),
+      true
+    );
+  });
+
+  socket.on('roomError', function (error) {
+    setStatus(
+      typeof error === 'string'
+        ? error
+        : 'Não foi possível entrar na partida.',
+      true
+    );
+  });
+
+  socket.on('roomJoined', function (data) {
+    if (!data || !Array.isArray(data.players)) {
+      setStatus('Resposta inválida do servidor.', true);
+      return;
+    }
+
+    clearPlayers();
+
+    roomCode = data.room && data.room.code
+      ? String(data.room.code)
+      : 'publica';
+
+    myId = socket.id;
+
+    data.players.forEach(upsertPlayer);
+
+    const ownPlayer = data.players.find(function (player) {
+      return player.id === myId;
+    });
+
+    if (ownPlayer && ownPlayer.avatar) {
+      applyColorInputs(ownPlayer.avatar);
+    }
+
+    setStatus(
+      'Multiplayer conectado: ' +
+      data.players.length + '/' + MAX_PLAYERS
+    );
+  });
+
+  socket.on('playerJoined', upsertPlayer);
+  socket.on('playerUpdated', upsertPlayer);
+
+  socket.on('playerMoved3d', function (player) {
+    if (!player || !player.id) return;
+
+    const group = players.get(player.id);
+    if (!group) return;
+
+    if (Number.isFinite(player.x)) {
+      group.position.x = player.x;
+    }
+
+    if (Number.isFinite(player.z)) {
+      group.position.z = player.z;
+    }
+
+    if (Number.isFinite(player.rotation)) {
+      group.rotation.y = player.rotation;
+    }
+  });
+
+  socket.on('playerLeft', removePlayer);
+
+  socket.on('roomInfo', function (data) {
+    if (!data) return;
+
+    const count = Number.isFinite(data.count)
+      ? data.count
+      : players.size;
+
+    setStatus(
+      'Multiplayer conectado: ' + count + '/' + MAX_PLAYERS
+    );
+  });
+
+  socket.on('roomClosed', function () {
+    clearPlayers();
+
+    setStatus(
+      'Partida encerrada. Recarregue a experiência para reconectar.'
+    );
+  });
+
+  socket.on('avatarSaved', function (avatar) {
+    applyColorInputs(avatar);
+
+    if (myPlayer) {
+      applyAvatar(myPlayer, avatar);
+    }
+
+    setStatus('Avatar atualizado.');
+  });
+
+  socket.on('disconnect', function () {
+    connecting = false;
+    clearPlayers();
+
+    setStatus('Conexão perdida. Tentando reconectar...', true);
+  });
+}
+
+// Salvar personalização no servidor.
+saveAvatarButton.addEventListener('click', function () {
+  const avatar = readColors();
+
+  if (!socket || !socket.connected) {
+    setStatus('Aguardando conexão com o servidor...', true);
+    ensureSocket();
+    return;
+  }
+
+  socket.emit('setAvatar', avatar);
+});
+
+// ============================================================
+// CONTROLES WASD E SETAS
+// ============================================================
+
+const movementKeys = new Set([
+  'w', 'a', 's', 'd',
+  'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
+]);
+
+window.addEventListener('keydown', function (event) {
+  const tag = document.activeElement
+    ? document.activeElement.tagName
+    : '';
+
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  const key = event.key.toLowerCase();
+
+  if (movementKeys.has(key)) {
+    keys.add(key);
+    event.preventDefault();
+  }
+});
+
+window.addEventListener('keyup', function (event) {
+  keys.delete(event.key.toLowerCase());
+});
+
+window.addEventListener('blur', function () {
+  keys.clear();
+});
+
+// ============================================================
+// CARREGAR CENA PUBLICADA
+// ============================================================
+
+async function loadScene() {
+  const url = '/api/scenes/' + encodeURIComponent(gameId);
+  const response = await fetch(url);
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch (error) {
+    throw new Error(
+      'O servidor não retornou JSON válido para a cena.'
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || 'Falha ao carregar a cena publicada.'
+    );
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('Dados da cena inválidos.');
+  }
+
+  if (!Array.isArray(data.objects)) {
+    data.objects = [];
+  }
+
+  return data;
+}
+
+// ============================================================
+// CRIAR MUNDO 3D
+// ============================================================
+
+function createWorld(data) {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color('#10182a');
+
+  scene.add(
+    new THREE.HemisphereLight(0xffffff, 0x526080, 2)
+  );
+
+  const light = new THREE.DirectionalLight(0xffffff, 2);
+  light.position.set(8, 12, 7);
+  scene.add(light);
+
+  const grid = new THREE.GridHelper(
+    100,
+    100,
+    0x53648a,
+    0x26344f
+  );
+
+  scene.add(grid);
+
+  // Chão
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(1000, 1000),
+    new THREE.MeshStandardMaterial({
+      color: '#141e30',
+      side: THREE.DoubleSide
+    })
+  );
+
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.03;
+  scene.add(floor);
+
+  // Objetos publicados pelo editor.
+  data.objects.forEach(function (object) {
+    if (!object || !Array.isArray(object.position)) return;
+
+    let geometry = null;
+
+    switch (object.type) {
+      case 'Box':
+        geometry = new THREE.BoxGeometry(1, 1, 1);
+        break;
+
+      case 'Sphere':
+        geometry = new THREE.SphereGeometry(0.5, 24, 16);
+        break;
+
+      case 'Plane':
+        geometry = new THREE.PlaneGeometry(1, 1);
+        break;
+
+      case 'Cylinder':
+        geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+        break;
+
+      default:
+        return;
+    }
+
+    const material = new THREE.MeshStandardMaterial({
+      color: object.color || '#8b8bff',
+      roughness: 0.75,
+      side: THREE.DoubleSide
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+
+    mesh.name = object.name || object.type;
+    mesh.position.fromArray(object.position);
+
+    if (Array.isArray(object.rotation)) {
+      mesh.rotation.set(
+        Number(object.rotation[0]) || 0,
+        Number(object.rotation[1]) || 0,
+        Number(object.rotation[2]) || 0
+      );
+    }
+
+    if (Array.isArray(object.scale)) {
+      mesh.scale.fromArray(object.scale);
+    }
+
+    if (object.type === 'Plane') {
+      mesh.rotation.x -= Math.PI / 2;
+    }
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    scene.add(mesh);
+  });
+
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio || 1, 2)
+  );
+
+  renderer.setSize(
+    Math.max(1, viewport.clientWidth),
+    Math.max(1, viewport.clientHeight)
+  );
+
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    viewport.appendChild(renderer.domElement);
+
+  // BW_GAME_MENU_CHARACTER_CLICK_V1
+  renderer.domElement.addEventListener("click", function (event) {
+    if (!scene || !camera || !renderer) return;
+    if (event.button !== 0) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, camera);
+
+    const objects = Array.from(players.values());
+    const hits = raycaster.intersectObjects(objects, true);
+    for (const hit of hits) {
+      let node = hit.object;
+      while (node && !node.userData?.playerId) node = node.parent;
+      if (!node || !node.userData || !node.userData.playerId) continue;
+      if (node.userData.playerId === myId) return;
+
+      window.dispatchEvent(new CustomEvent("bw:playerclick", {
+        detail: {
+          id: node.userData.playerId,
+          username: node.userData.username || "Jogador"
+        }
+      }));
+      return;
+    }
+  });
+
+  camera = new THREE.PerspectiveCamera(
+    60,
+    Math.max(1, viewport.clientWidth) /
+      Math.max(1, viewport.clientHeight),
+    0.1,
+    2000
+  );
+
+  camera.position.set(8, 7, 10);
+  camera.lookAt(0, 1, 0);
+
+  window.addEventListener('resize', resizeRenderer);
+}
+
+function resizeRenderer() {
+  if (!renderer || !camera) return;
+
+  const width = Math.max(1, viewport.clientWidth);
+  const height = Math.max(1, viewport.clientHeight);
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(width, height);
+}
+
+// ============================================================
+// LOOP PRINCIPAL DO JOGO
+// ============================================================
+
+function animate(timestamp) {
+  requestAnimationFrame(animate);
+
+  if (!renderer || !scene || !camera) return;
+
+  const delta = lastFrame
+    ? Math.min((timestamp - lastFrame) / 1000, 0.05)
+    : 0;
+
+  lastFrame = timestamp;
+
+  // Anima todos os personagens, inclusive os remotos.
+  players.forEach(function (group) {
+    animateAvatar(group, delta);
+  });
+
+  // Movimento do jogador local.
+  if (myPlayer && roomCode) {
+    let dx = 0;
+    let dz = 0;
+
+    if (keys.has('w') || keys.has('arrowup')) dz -= 1;
+    if (keys.has('s') || keys.has('arrowdown')) dz += 1;
+    if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
+    if (keys.has('d') || keys.has('arrowright')) dx += 1;
+
+    if (dx !== 0 || dz !== 0) {
+      const length = Math.hypot(dx, dz);
+
+      dx /= length;
+      dz /= length;
+
+      myPlayer.position.x = THREE.MathUtils.clamp(
+        myPlayer.position.x + dx * MOVE_SPEED * delta,
+        -500,
+        500
+      );
+
+      myPlayer.position.z = THREE.MathUtils.clamp(
+        myPlayer.position.z + dz * MOVE_SPEED * delta,
+        -500,
+        500
+      );
+
+      myPlayer.rotation.y = Math.atan2(dx, dz);
+
+      moveTimer += delta;
+
+      if (moveTimer >= MOVE_INTERVAL && socket && socket.connected) {
+        moveTimer = 0;
+
+        socket.emit('move3d', {
+          x: myPlayer.position.x,
+          z: myPlayer.position.z,
+          rotation: myPlayer.rotation.y
+        });
+      }
+    }
+
+    // Câmera em terceira pessoa.
+    const targetX = myPlayer.position.x;
+    const targetZ = myPlayer.position.z;
+
+    camera.position.x +=
+      (targetX + 8 - camera.position.x) * 0.08;
+
+    camera.position.z +=
+      (targetZ + 10 - camera.position.z) * 0.08;
+
+    camera.lookAt(targetX, 1, targetZ);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
+
+async function main() {
+  try {
+    if (!gameId || gameId === 'play') {
+      throw new Error(
+        'Não foi possível identificar o jogo publicado. ' +
+        'Confira a URL usada para abrir a experiência.'
+      );
+    }
+
+    setStatus('Carregando cena 3D...');
+
+    const data = await loadScene();
+
+    createWorld(data);
+
+    setMessage(
+      'Cena carregada: ' + data.objects.length + ' objetos.'
+    );
+
+    if (!animationStarted) {
+      animationStarted = true;
+      requestAnimationFrame(animate);
+    }
+
+    // Entrada automática no multiplayer.
+    ensureSocket();
+  } catch (error) {
+    console.error('[BlockWorld] Falha ao iniciar:', error);
+
+    setMessage(
+      'Erro ao carregar: ' +
+      (error && error.message
+        ? error.message
+        : 'erro desconhecido'),
+      true
+    );
+
+    setStatus('Não foi possível iniciar o jogo.', true);
+  }
+}
+
+
+// BW_GAME_MENU_BRIDGE_V1
+window.BWGame = {
+  getPlayers: function () {
+    return Array.from(players.entries()).map(function (entry) {
+      const id = entry[0];
+      const group = entry[1];
+      return {
+        id: id,
+        username: group && group.userData && group.userData.username
+          ? group.userData.username : "Jogador",
+        isSelf: id === myId
+      };
+    });
+  },
+  leave: function () {
+    if (socket && socket.connected) socket.emit("leaveRoom");
+  }
+};
+main();
