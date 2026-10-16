@@ -1,5 +1,6 @@
 
 
+
 <script>
 (() => {
   'use strict';
@@ -7,19 +8,21 @@
   const API_URL = 'https://dfdfdf-1.onrender.com';
 
   function iniciarLogin() {
-    const form = document.getElementById('authForm');
-    const loginTab = document.getElementById('loginTab');
-    const registerTab = document.getElementById('registerTab');
-    const confirmWrap = document.getElementById('confirmWrap');
-    const confirmPassword = document.getElementById('confirmPassword');
-    const password = document.getElementById('password');
-    const submitButton = document.getElementById('submitButton');
-    const notice = document.getElementById('notice');
-    const username = document.getElementById('username');
-    const heading = document.getElementById('heading');
-    const description = document.getElementById('description');
+    const $ = id => document.getElementById(id);
 
-    // Verifica se os elementos necessários existem no HTML.
+    const form = $('authForm');
+    const loginTab = $('loginTab');
+    const registerTab = $('registerTab');
+    const confirmWrap = $('confirmWrap');
+    const confirmPassword = $('confirmPassword');
+    const password = $('password');
+    const submitButton = $('submitButton');
+    const notice = $('notice');
+    const username = $('username');
+    const heading = $('heading');
+    const description = $('description');
+
+    // Não inicia se o HTML necessário não existir.
     const elementos = {
       authForm: form,
       loginTab,
@@ -34,59 +37,56 @@
       description
     };
 
-    const ausentes = Object.entries(elementos)
-      .filter(([, elemento]) => !elemento)
-      .map(([nome]) => nome);
+    const ausentes = Object.keys(elementos).filter(
+      id => !elementos[id]
+    );
 
-    if (ausentes.length > 0) {
+    if (ausentes.length) {
       console.error(
-        '[BlockWorld] Elementos não encontrados no HTML:',
+        '[BlockWorld] HTML incompleto. Elementos ausentes:',
         ausentes.join(', ')
       );
 
-      if (notice) {
-        notice.textContent =
-          'Erro na página de login. Faltam elementos: ' +
-          ausentes.join(', ') +
-          '. Confira o HTML.';
-        notice.className = 'notice error';
-      }
-
+      console.error(
+        '[BlockWorld] Confira se este script está no login.html correto.'
+      );
       return;
     }
 
-    let mode = 'login';
+    let modo = 'login';
     let enviando = false;
 
-    function showNotice(message, type = 'error') {
-      notice.textContent = message;
-      notice.className = 'notice ' + type;
+    function mostrarAviso(mensagem, tipo = 'error') {
+      notice.textContent = mensagem;
+      notice.className = 'notice ' + tipo;
     }
 
-    function setMode(next) {
-      mode = next === 'register' ? 'register' : 'login';
+    function definirModo(novoModo) {
+      if (enviando) return;
 
-      const registering = mode === 'register';
+      modo = novoModo === 'register' ? 'register' : 'login';
 
-      loginTab.classList.toggle('active', !registering);
-      registerTab.classList.toggle('active', registering);
+      const cadastro = modo === 'register';
 
-      confirmWrap.hidden = !registering;
-      confirmPassword.required = registering;
+      loginTab.classList.toggle('active', !cadastro);
+      registerTab.classList.toggle('active', cadastro);
 
-      password.autocomplete = registering
+      confirmWrap.hidden = !cadastro;
+      confirmPassword.required = cadastro;
+
+      password.autocomplete = cadastro
         ? 'new-password'
         : 'current-password';
 
-      heading.textContent = registering
+      heading.textContent = cadastro
         ? 'Crie sua conta'
         : 'Bem-vindo de volta!';
 
-      description.textContent = registering
+      description.textContent = cadastro
         ? 'Cadastre-se para começar sua jornada na BlockWorld.'
         : 'Entre para acessar sua conta e seus jogos.';
 
-      submitButton.textContent = registering
+      submitButton.textContent = cadastro
         ? 'Criar minha conta'
         : 'Entrar na conta';
 
@@ -94,137 +94,132 @@
       notice.className = 'notice';
     }
 
-    function getDestination() {
+    function destino() {
       const params = new URLSearchParams(location.search);
-      const next = params.get('next') || '/';
+      const proximo = params.get('next') || '/';
 
-      // Aceita somente destinos relativos seguros.
       if (
-        next.startsWith('/') &&
-        !next.startsWith('//') &&
-        !next.startsWith('/\\') &&
-        next !== '/login.html'
+        proximo.startsWith('/') &&
+        !proximo.startsWith('//') &&
+        !proximo.startsWith('/\\') &&
+        proximo !== '/login.html'
       ) {
-        return next;
+        return proximo;
       }
 
       return '/';
     }
 
-    async function apiRequest(path, options = {}) {
-      let response;
+    async function requisicaoAPI(caminho, opcoes = {}) {
+      let resposta;
 
       try {
-        response = await fetch(API_URL + path, {
-          ...options,
+        resposta = await fetch(API_URL + caminho, {
+          ...opcoes,
           credentials: 'include',
           cache: 'no-store'
         });
-      } catch (error) {
-        console.error('[BlockWorld] Erro de conexão:', error);
+      } catch (erro) {
+        console.error('[BlockWorld] Falha na API:', erro);
 
         throw new Error(
-          'Não foi possível conectar à API. Verifique o Render e a configuração CORS.'
+          'Não foi possível conectar ao servidor. Verifique a conexão e o CORS.'
         );
       }
 
-      const contentType =
-        response.headers.get('content-type') || '';
+      const tipo = resposta.headers.get('content-type') || '';
+      let dados = {};
 
-      let data = {};
-
-      if (contentType.includes('application/json')) {
+      if (tipo.includes('application/json')) {
         try {
-          data = await response.json();
+          dados = await resposta.json();
         } catch {
-          throw new Error('O servidor retornou JSON inválido.');
+          throw new Error('O servidor retornou uma resposta JSON inválida.');
         }
-      } else if (!response.ok) {
-        throw new Error(
-          `Erro HTTP ${response.status}. Confira a rota da API.`
-        );
       } else {
         throw new Error(
-          'O servidor respondeu em um formato inesperado.'
+          'Resposta inesperada do servidor. Código HTTP ' +
+          resposta.status + '.'
         );
       }
 
-      if (!response.ok) {
+      if (!resposta.ok) {
         throw new Error(
-          data.error ||
-          data.message ||
-          `Erro HTTP ${response.status}.`
+          dados.error ||
+          dados.message ||
+          'Erro HTTP ' + resposta.status + '.'
         );
       }
 
-      return data;
+      return dados;
     }
 
-    async function checkSession() {
+    async function verificarSessao() {
       try {
-        const data = await apiRequest('/api/me');
+        const dados = await requisicaoAPI('/api/me');
 
-        if (data.user) {
-          showNotice(
+        if (dados.user) {
+          mostrarAviso(
             'Você já está conectado como ' +
-            data.user.username +
+            dados.user.username +
             '. Redirecionando...',
             'success'
           );
 
           submitButton.disabled = true;
 
-          setTimeout(() => {
-            location.replace(getDestination());
+          window.setTimeout(() => {
+            location.replace(destino());
           }, 500);
         }
-      } catch (error) {
-        // Uma sessão inexistente não impede o login.
+      } catch (erro) {
+        // Uma sessão inexistente não impede o usuário de entrar.
         console.warn(
-          '[BlockWorld] Não foi possível verificar a sessão:',
-          error.message
+          '[BlockWorld] Verificação da sessão:',
+          erro.message
         );
       }
     }
 
     loginTab.addEventListener('click', () => {
-      if (!enviando) setMode('login');
+      definirModo('login');
     });
 
     registerTab.addEventListener('click', () => {
-      if (!enviando) setMode('register');
+      definirModo('register');
     });
 
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
+    form.addEventListener('submit', async evento => {
+      evento.preventDefault();
 
       if (enviando) return;
+
+      if (!form.reportValidity()) return;
 
       const nome = username.value.trim();
       const senha = password.value;
 
-      if (mode === 'register' && senha !== confirmPassword.value) {
-        showNotice('As senhas não coincidem.');
+      if (modo === 'register' && senha !== confirmPassword.value) {
+        mostrarAviso('As senhas não coincidem.');
         return;
       }
-
-      if (!form.reportValidity()) return;
 
       enviando = true;
       submitButton.disabled = true;
 
-      submitButton.textContent = mode === 'register'
+      submitButton.textContent = modo === 'register'
         ? 'Criando conta...'
         : 'Entrando...';
 
+      notice.textContent = '';
       notice.className = 'notice';
 
       try {
-        const endpoint = mode === 'register'
+        const caminho = modo === 'register'
           ? '/api/register'
           : '/api/login';
 
-        await apiRequest(endpoint, {
+        const dados = await requisicaoAPI(caminho, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -235,37 +230,48 @@
           })
         });
 
-        showNotice(
+        if (dados.success === false || dados.sucesso === false) {
+          throw new Error(
+            dados.error ||
+            dados.message ||
+            'Não foi possível concluir a operação.'
+          );
+        }
+
+        mostrarAviso(
           'Tudo certo! Entrando na BlockWorld...',
           'success'
         );
 
-        location.assign(getDestination());
+        // Evita reativar o botão durante o redirecionamento.
+        location.assign(destino());
+        return;
 
-      } catch (error) {
-        showNotice(
-          error.message || 'Falha ao entrar na conta.'
+      } catch (erro) {
+        mostrarAviso(
+          erro.message || 'Falha ao entrar na conta.'
         );
-
-      } finally {
-        enviando = false;
-        submitButton.disabled = false;
-
-        submitButton.textContent = mode === 'register'
-          ? 'Criar minha conta'
-          : 'Entrar na conta';
       }
+
+      enviando = false;
+      submitButton.disabled = false;
+
+      submitButton.textContent = modo === 'register'
+        ? 'Criar minha conta'
+        : 'Entrar na conta';
     });
 
-    setMode('login');
-    checkSession();
+    definirModo('login');
+    verificarSessao();
   }
 
-  // Funciona mesmo se o script for movido para o <head>.
+  // Aguarda o HTML ser carregado antes de procurar os elementos.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', iniciarLogin, {
-      once: true
-    });
+    document.addEventListener(
+      'DOMContentLoaded',
+      iniciarLogin,
+      { once: true }
+    );
   } else {
     iniciarLogin();
   }
