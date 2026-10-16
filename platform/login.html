@@ -1,87 +1,7 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#080d18">
-<title>Entrar | BlockWorld</title>
-<style>
-*{box-sizing:border-box}
-:root{color-scheme:dark}
-body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#18264a 0%,#080d18 60%);color:#eef2ff;font:15px system-ui,sans-serif;display:grid;place-items:center;padding:24px}
-a{color:#bcb6ff;text-decoration:none}
-a:hover{text-decoration:underline}
-button,input{font:inherit}
-.page{width:100%;max-width:440px}
-.brand{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:25px}
-.logo{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(135deg,#8b7cff,#5144ce);font-size:25px;font-weight:900;box-shadow:0 8px 35px #635bdb45}
-.brand h1{font-size:25px;margin:0;letter-spacing:-.8px}
-.brand p{margin:3px 0 0;color:#9ca9c5;font-size:13px}
-.card{background:#11192b;border:1px solid #293652;border-radius:22px;padding:28px;box-shadow:0 24px 80px #0005}
-.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#a9a0ff;font-weight:800}
-h2{font-size:26px;letter-spacing:-.7px;margin:8px 0}
-.description{color:#9ca9c5;line-height:1.6;margin:0 0 22px}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#080d18;padding:5px;border-radius:12px;margin-bottom:22px}
-.tabs button{border:0;border-radius:9px;background:transparent;color:#9ca9c5;padding:11px;cursor:pointer;font-weight:700}
-.tabs button.active{background:#635bdb;color:white}
-label{display:block;font-size:13px;font-weight:700;margin:15px 0 7px}
-input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid #34415e;background:#080d18;color:#eef2ff;outline:none}
-input:focus{border-color:#9188ff;box-shadow:0 0 0 3px #635bdb30}
-.primary{width:100%;margin-top:22px;padding:13px;border:0;border-radius:11px;background:linear-gradient(135deg,#776cff,#5144ce);color:white;font-weight:800;cursor:pointer}
-.primary:hover{filter:brightness(1.1)}
-.primary:disabled{opacity:.6;cursor:wait}
-.notice{display:none;margin-top:16px;padding:12px;border-radius:10px;line-height:1.5;font-size:13px;overflow-wrap:anywhere}
-.notice.error{display:block;background:#421e2b;color:#ffc0ca;border:1px solid #743044}
-.notice.success{display:block;background:#16382d;color:#b5f3d2;border:1px solid #285f49}
-.hint{color:#8795b4;font-size:12px;line-height:1.6;margin-top:18px}
-.bottom{text-align:center;color:#8795b4;font-size:13px;margin-top:20px}
-#confirmWrap[hidden]{display:none}
-</style>
-</head>
-<body>
-<main class="page">
-  <div class="brand">
-    <div class="logo">B</div>
-    <div><h1>BlockWorld</h1><p>Seu mundo. Seus jogos.</p></div>
-  </div>
-
-  <section class="card">
-    <div class="eyebrow">Sua conta BlockWorld</div>
-    <h2 id="heading">Bem-vindo de volta!</h2>
-    <p class="description" id="description">Entre para acessar sua conta e seus jogos.</p>
-
-    <div class="tabs">
-      <button type="button" id="loginTab" class="active">Entrar</button>
-      <button type="button" id="registerTab">Criar conta</button>
-    </div>
-
-    <form id="authForm">
-      <label for="username">Nome de usuário</label>
-      <input id="username" name="username" minlength="3" maxlength="24"
-        pattern="[\p{L}\p{N}_-]{3,24}" autocomplete="username"
-        placeholder="Seu nome de usuário" required>
-
-      <label for="password">Senha</label>
-      <input id="password" name="password" type="password" minlength="8"
-        maxlength="128" autocomplete="current-password"
-        placeholder="Sua senha" required>
-
-      <div id="confirmWrap" hidden>
-        <label for="confirmPassword">Confirmar senha</label>
-        <input id="confirmPassword" type="password" minlength="8"
-          maxlength="128" autocomplete="new-password" placeholder="Digite a senha novamente">
-      </div>
-
-      <button class="primary" id="submitButton" type="submit">Entrar na conta</button>
-      <div class="notice" id="notice" role="status" aria-live="polite"></div>
-    </form>
-
-    <p class="hint">Use uma senha com pelo menos 8 caracteres. Não compartilhe sua senha com outras pessoas.</p>
-  </section>
-  <div class="bottom"><a href="/">← Voltar para a BlockWorld</a></div>
-</main>
 
 <script>
+const API_URL = 'https://dfdfdf-1.onrender.com';
+
 const form = document.getElementById('authForm');
 const loginTab = document.getElementById('loginTab');
 const registerTab = document.getElementById('registerTab');
@@ -90,49 +10,106 @@ const confirmPassword = document.getElementById('confirmPassword');
 const password = document.getElementById('password');
 const submitButton = document.getElementById('submitButton');
 const notice = document.getElementById('notice');
+
 let mode = 'login';
 
-function showNotice(text, type) {
-  notice.textContent = text;
+function showNotice(message, type) {
+  notice.textContent = message;
   notice.className = 'notice ' + type;
 }
+
 function setMode(next) {
   mode = next;
   const registering = mode === 'register';
+
   loginTab.classList.toggle('active', !registering);
   registerTab.classList.toggle('active', registering);
+
   confirmWrap.hidden = !registering;
   confirmPassword.required = registering;
-  password.autocomplete = registering ? 'new-password' : 'current-password';
-  document.getElementById('heading').textContent = registering ? 'Crie sua conta' : 'Bem-vindo de volta!';
+
+  password.autocomplete = registering
+    ? 'new-password'
+    : 'current-password';
+
+  document.getElementById('heading').textContent =
+    registering ? 'Crie sua conta' : 'Bem-vindo de volta!';
+
   document.getElementById('description').textContent = registering
     ? 'Cadastre-se para começar sua jornada na BlockWorld.'
     : 'Entre para acessar sua conta e seus jogos.';
-  submitButton.textContent = registering ? 'Criar minha conta' : 'Entrar na conta';
+
+  submitButton.textContent = registering
+    ? 'Criar minha conta'
+    : 'Entrar na conta';
+
   notice.className = 'notice';
 }
+
 loginTab.addEventListener('click', () => setMode('login'));
 registerTab.addEventListener('click', () => setMode('register'));
 
 function getDestination() {
   const next = new URLSearchParams(location.search).get('next') || '/';
-  return next.startsWith('/') && !next.startsWith('//') && next !== '/login.html'
-    ? next : '/';
+
+  return next.startsWith('/')
+    && !next.startsWith('//')
+    && next !== '/login.html'
+    ? next
+    : '/';
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(API_URL + path, {
+    ...options,
+    credentials: 'include',
+    cache: 'no-store'
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+
+  let data = {};
+
+  if (contentType.includes('application/json')) {
+    data = await response.json();
+  } else {
+    throw new Error(
+      response.ok
+        ? 'O servidor retornou uma resposta inesperada.'
+        : `Erro HTTP ${response.status}. Verifique a API do Render e o CORS.`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || data.message || `Erro HTTP ${response.status}.`);
+  }
+
+  return data;
 }
 
 async function checkSession() {
   try {
-    const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
-    const data = await response.json();
-    if (response.ok && data.user) {
-      showNotice('Você já está conectado como ' + data.user.username + '. Redirecionando...', 'success');
+    const data = await apiRequest('/api/me');
+
+    if (data.user) {
+      showNotice(
+        'Você já está conectado como ' +
+        data.user.username +
+        '. Redirecionando...',
+        'success'
+      );
+
       submitButton.disabled = true;
       location.replace(getDestination());
     }
-  } catch {}
+  } catch (error) {
+    console.warn('[BlockWorld] Não foi possível verificar a sessão:', error);
+  }
 }
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
+
   const username = document.getElementById('username').value.trim();
   const secret = password.value;
 
@@ -142,28 +119,43 @@ form.addEventListener('submit', async event => {
   }
 
   submitButton.disabled = true;
-  submitButton.textContent = mode === 'register' ? 'Criando conta...' : 'Entrando...';
+  submitButton.textContent = mode === 'register'
+    ? 'Criando conta...'
+    : 'Entrando...';
+
   notice.className = 'notice';
 
   try {
-    const response = await fetch(mode === 'register' ? '/api/register' : '/api/login', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: secret })
-    });
-    const data = await response.json();
+    const path = mode === 'register'
+      ? '/api/register'
+      : '/api/login';
 
-    if (!response.ok) throw new Error(data.error || 'Não foi possível autenticar.');
+    await apiRequest(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        password: secret
+      })
+    });
+
     showNotice('Tudo certo! Entrando na BlockWorld...', 'success');
     location.assign(getDestination());
+
   } catch (error) {
-    showNotice(error.message || 'Falha de conexão com o servidor.', 'error');
+    showNotice(
+      error.message || 'Falha de conexão com o servidor.',
+      'error'
+    );
+
     submitButton.disabled = false;
-    submitButton.textContent = mode === 'register' ? 'Criar minha conta' : 'Entrar na conta';
+    submitButton.textContent = mode === 'register'
+      ? 'Criar minha conta'
+      : 'Entrar na conta';
   }
 });
+
 checkSession();
 </script>
-</body>
-</html>
