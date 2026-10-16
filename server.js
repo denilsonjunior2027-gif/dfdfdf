@@ -283,11 +283,20 @@ function cookieValue(req, key) {
 }
 
 function currentUser(req) {
-  const token = cookieValue(req, 'bw_session');
+  const headerToken = req.headers['x-bw-session'];
+
+  const token =
+    cookieValue(req, 'bw_session') ||
+    (typeof headerToken === 'string' ? headerToken.trim() : '');
+
+  if (!token || token.length > 256) {
+    return null;
+  }
+
   const session = sessions.get(token);
 
   if (!session || session.expires < Date.now()) {
-    if (token) sessions.delete(token);
+    sessions.delete(token);
     return null;
   }
 
