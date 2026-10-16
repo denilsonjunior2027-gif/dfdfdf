@@ -1,0 +1,330 @@
+import * as THREE from '/vendor/three/build/three.module.js';
+import { OrbitControls } from '/vendor/three/examples/jsm/controls/OrbitControls.js';
+
+const message = document.getElementById('message');
+const viewport = document.getElementById('viewport');
+const gameId = location.pathname.split('/').filter(Boolean).pop();
+const colors = {
+  skin: '#d9a078',
+  hair: '#38251c',
+  shirt: '#635bdb',
+  pants: '#27344d'
+};
+let socket = null;
+let myId = null;
+let roomCode = '';
+let objects = new Map();
+let players = new Map();
+let keys = new Set();
+let myPlayer = null;
+let moveTimer = 0;
+
+const panel = document.createElement('section');
+panel.id = 'bwMultiplayerPanel';
+panel.style.cssText = 'margin:12px;padding:14px;background:#11192b;border:1px solid #26334c;border-radius:14px;color:#eef2ff;font:14px system-ui;display:flex;gap:12px;flex-wrap:wrap;align-items:center';
+panel.innerHTML = `
+  <strong>Multiplayer</strong>
+  <button id="bwCreate">Criar sala</button>
+  <input id="bwCode" maxlength="6" placeholder="CODIGO" aria-label="Codigo da sala" style="width:100px;text-transform:uppercase">
+  <button id="bwJoin">Entrar na sala</button>
+  <button id="bwLeave">Sair da sala</button>
+  <span id="bwRoomStatus">Conectando...</span>
+  <div style="flex-basis:100%;height:1px;background:#26334c"></div>
+  <strong>Personalizar avatar</strong>
+  <label>Pele <input type="color" id="bwSkin" value="${colors.skin}"></label>
+  <label>Cabelo <input type="color" id="bwHair" value="${colors.hair}"></label>
+  <label>Camisa <input type="color" id="bwShirt" value="${colors.shirt}"></label>
+  <label>Calça <input type="color" id="bwPants" value="${colors.pants}"></label>
+  <button id="bwSaveAvatar">Salvar avatar</button>
+  <span style="color:#9ca9c5">Movimente com WASD ou setas.</span>
+`;
+panel.querySelectorAll('button').forEach(button => {
+  button.style.cssText = 'background:#635bdb;color:white;border:0;border-radius:8px;padding:9px 12px;cursor:pointer';
+});
+panel.querySelectorAll('input').forEach(input => {
+  input.style.cssText += ';background:#080d18;color:white;border:1px solid #394662;border-radius:6px;padding:7px';
+});
+viewport.parentNode.insertBefore(panel, viewport);
+
+const roomStatus = document.getElementById('bwRoomStatus');
+function status(text, bad = false) {
+  roomStatus.textContent = text;
+  roomStatus.style.color = bad ? '#ff9999' : '#a9e8bf';
+}
+function readColors() {
+  for (const key of Object.keys(colors)) {
+    colors[key] = document.getElementById('bw' + key[0].toUpperCase() + key.slice(1)).value;
+  }
+  return { ...colors };
+}
+for (const key of Object.keys(colors)) {
+  document.getElementById('bw' + key[0].toUpperCase() + key.slice(1)).addEventListener('input', () => {
+    readColors();
+    if (myPlayer) applyAvatar(myPlayer, colors);
+  });
+}
+
+let scene, camera, renderer, controls;
+const clock = new THREE.Clock();
+
+function makeLabel(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(8,13,24,.82)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, 496, 112, 22);
+  ctx.fill();
+  ctx.font = 'bold 38px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(String(text).slice(0, 24), 256, 78);
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  sprite.scale.set(2.5, 0.62, 1);
+  sprite.position.y = 2.8;
+  return sprite;
+}
+
+function buildAvatar(player) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#635bdb' });
+  const skinMat = new THREE.MeshStandardMaterial({ color: '#d9a078' });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: '#27344d' });
+  const hairMat = new THREE.MeshStandardMaterial({ color: '#38251c' });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.4), bodyMat);
+  body.position.y = 1.25;
+  group.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.58, 0.58), skinMat);
+  head.position.y = 2.02;
+  group.add(head);
+  const hair = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.62), hairMat);
+  hair.position.y = 2.38;
+  group.add(hair);
+  for (const x of [-0.23, 0.23]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 0.34), pantsMat);
+    leg.position.set(x, 0.4, 0);
+    group.add(leg);
+  }
+  const label = makeLabel(player.username);
+  group.add(label);
+  group.userData.mats = { skinMat, hairMat, bodyMat, pantsMat };
+  group.userData.label = label;
+  applyAvatar(group, player.avatar || colors);
+  return group;
+}
+function applyAvatar(group, avatar) {
+  if (!group?.userData?.mats) return;
+  const safe = avatar || {};
+  const mats = group.userData.mats;
+  for (const [key, mat] of [['skin', mats.skinMat], ['hair', mats.hairMat], ['shirt', mats.bodyMat], ['pants', mats.pantsMat]]) {
+    if (/^#[0-9a-f]{6}$/i.test(safe[key] || '')) mat.color.set(safe[key]);
+  }
+}
+function upsertPlayer(player) {
+  let group = players.get(player.id);
+  if (!group) {
+    group = buildAvatar(player);
+    scene.add(group);
+    players.set(player.id, group);
+  }
+  group.position.set(player.x || 0, 0, player.z || 0);
+  group.rotation.y = player.rotation || 0;
+  group.userData.label.material.needsUpdate = true;
+  applyAvatar(group, player.avatar);
+  if (player.id === myId) myPlayer = group;
+}
+function removePlayer(id) {
+  const group = players.get(id);
+  if (!group) return;
+  scene.remove(group);
+  group.traverse(item => {
+    if (item.geometry) item.geometry.dispose();
+    if (item.material) {
+      if (item.material.map) item.material.map.dispose();
+      item.material.dispose();
+    }
+  });
+  players.delete(id);
+  if (id === myId) myPlayer = null;
+}
+function clearRoom() {
+  for (const id of [...players.keys()]) removePlayer(id);
+  roomCode = '';
+  myPlayer = null;
+  status('Sem sala');
+}
+function ensureSocket() {
+  if (socket?.connected) return;
+  if (typeof window.io !== 'function') {
+    status('Socket.IO nao carregou. Atualize a pagina.', true);
+    return;
+  }
+  if (socket) return;
+  socket = window.io();
+  socket.on('connect', () => status('Conectado; entre ou crie uma sala'));
+  socket.on('connect_error', error => status(error.message || 'Entre na sua conta.', true));
+  socket.on('roomError', error => status(String(error), true));
+  socket.on('roomJoined', data => {
+    clearRoom();
+    roomCode = data.room.code;
+    myId = socket.id;
+    for (const player of data.players) upsertPlayer(player);
+    document.getElementById('bwCode').value = roomCode;
+    status(`Sala ${roomCode} · ${data.players.length}/12 jogadores`);
+  });
+  socket.on('playerJoined', upsertPlayer);
+  socket.on('playerUpdated', upsertPlayer);
+  socket.on('playerMoved3d', player => {
+    const group = players.get(player.id);
+    if (group) {
+      group.position.set(player.x, 0, player.z);
+      group.rotation.y = player.rotation || 0;
+    }
+  });
+  socket.on('playerLeft', removePlayer);
+  socket.on('roomInfo', data => status(`Sala ${data.code} · ${data.count}/12 jogadores`));
+  socket.on('roomClosed', data => {
+    if (roomCode === data.code) clearRoom();
+  });
+  socket.on('avatarSaved', avatar => {
+    Object.assign(colors, avatar);
+    status('Avatar salvo na sua conta!');
+  });
+  socket.on('disconnect', () => {
+    clearRoom();
+    status('Desconectado do servidor.', true);
+  });
+}
+document.getElementById('bwCreate').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+};
+document.getElementById('bwJoin').onclick = () => {
+  ensureSocket();
+  const code = document.getElementById('bwCode').value.trim().toUpperCase();
+  if (socket?.connected) socket.emit('joinRoom', { code });
+};
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+  clearRoom();
+};
+document.getElementById('bwSaveAvatar').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('setAvatar', readColors());
+  else status('Entre na sua conta e conecte-se primeiro.', true);
+};
+
+window.addEventListener('keydown', event => {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const key = event.key.toLowerCase();
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+    keys.add(key);
+    event.preventDefault();
+  }
+});
+window.addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
+window.addEventListener('blur', () => keys.clear());
+
+async function main() {
+  try {
+    const response = await fetch(`/api/scenes/${encodeURIComponent(gameId)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Nao foi possivel carregar a cena.');
+    message.textContent = `Cena publicada · ${data.objects.length} objetos`;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color('#10182a');
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x526080, 2));
+    const light = new THREE.DirectionalLight(0xffffff, 2.4);
+    light.position.set(8, 12, 7);
+    scene.add(light);
+    const grid = new THREE.GridHelper(100, 100, 0x53648a, 0x26344f);
+    scene.add(grid);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(1000, 1000),
+      new THREE.MeshStandardMaterial({ color: '#141e30', side: THREE.DoubleSide })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.03;
+    scene.add(floor);
+
+    for (const o of data.objects || []) {
+      let geometry;
+      if (o.type === 'Box') geometry = new THREE.BoxGeometry(1, 1, 1);
+      else if (o.type === 'Sphere') geometry = new THREE.SphereGeometry(0.5, 24, 16);
+      else if (o.type === 'Plane') geometry = new THREE.PlaneGeometry(1, 1);
+      else if (o.type === 'Cylinder') geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+      else continue;
+      const material = new THREE.MeshStandardMaterial({
+        color: o.color || '#8b8bff',
+        roughness: 0.75,
+        side: o.type === 'Plane' ? THREE.DoubleSide : THREE.FrontSide
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = o.name || o.type;
+      mesh.position.fromArray(o.position);
+      mesh.rotation.set(...o.rotation);
+      mesh.scale.fromArray(o.scale);
+      if (o.type === 'Plane') mesh.rotation.x -= Math.PI / 2;
+      scene.add(mesh);
+    }
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    viewport.appendChild(renderer.domElement);
+    camera = new THREE.PerspectiveCamera(60, viewport.clientWidth / viewport.clientHeight, 0.1, 2000);
+    camera.position.set(12, 10, 14);
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+    window.addEventListener('resize', () => {
+      if (!renderer || !camera) return;
+      const w = Math.max(1, viewport.clientWidth);
+      const h = Math.max(1, viewport.clientHeight);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      if (myPlayer && roomCode) {
+        let dx = 0, dz = 0;
+        if (keys.has('w') || keys.has('arrowup')) dz -= 1;
+        if (keys.has('s') || keys.has('arrowdown')) dz += 1;
+        if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
+        if (keys.has('d') || keys.has('arrowright')) dx += 1;
+        if (dx || dz) {
+          const length = Math.hypot(dx, dz);
+          dx /= length;
+          dz /= length;
+          myPlayer.position.x = THREE.MathUtils.clamp(myPlayer.position.x + dx * 5 * delta, -500, 500);
+          myPlayer.position.z = THREE.MathUtils.clamp(myPlayer.position.z + dz * 5 * delta, -500, 500);
+          myPlayer.rotation.y = Math.atan2(dx, dz);
+          moveTimer += delta;
+          if (moveTimer > 0.07 && socket?.connected) {
+            moveTimer = 0;
+            socket.emit('move3d', {
+              x: myPlayer.position.x,
+              z: myPlayer.position.z,
+              rotation: myPlayer.rotation.y
+            });
+          }
+        }
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+    ensureSocket();
+  } catch (error) {
+    message.textContent = 'Erro ao abrir o jogo: ' + error.message;
+    message.style.color = '#ffb4b4';
+  }
+}
+main();

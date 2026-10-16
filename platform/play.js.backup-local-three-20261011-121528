@@ -1,0 +1,14 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
+const message=document.getElementById('message');const viewport=document.getElementById('viewport');const id=location.pathname.split('/').filter(Boolean).pop();
+try{
+ const response=await fetch(`/api/scenes/${encodeURIComponent(id)}`);const data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível carregar a cena.');
+ message.textContent=`Cena publicada · ${data.objects.length} objetos`;
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#10182a');scene.add(new THREE.HemisphereLight(0xffffff,0x526080,2));
+ const key=new THREE.DirectionalLight(0xffffff,2.4);key.position.set(8,12,7);scene.add(key);
+ const grid=new THREE.GridHelper(100,100,0x53648a,0x26344f);scene.add(grid);
+ const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(viewport.clientWidth,viewport.clientHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;viewport.appendChild(renderer.domElement);
+ const camera=new THREE.PerspectiveCamera(60,viewport.clientWidth/viewport.clientHeight,.1,2000);camera.position.set(12,10,14);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1,0);controls.update();
+ for(const o of data.objects){let geometry;if(o.type==='Box')geometry=new THREE.BoxGeometry(1,1,1);else if(o.type==='Sphere')geometry=new THREE.SphereGeometry(.5,24,16);else if(o.type==='Plane')geometry=new THREE.PlaneGeometry(1,1);else if(o.type==='Cylinder')geometry=new THREE.CylinderGeometry(.5,.5,1,24);else continue;const material=new THREE.MeshStandardMaterial({color:o.color||'#8b8bff',roughness:.75,side:o.type==='Plane'?THREE.DoubleSide:THREE.FrontSide});const mesh=new THREE.Mesh(geometry,material);mesh.name=o.name||o.type;mesh.position.fromArray(o.position);mesh.rotation.set(...o.rotation);mesh.scale.fromArray(o.scale);if(o.type==='Plane')mesh.rotation.x-=Math.PI/2;scene.add(mesh);}
+ const resize=()=>{const w=viewport.clientWidth,h=viewport.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h)};window.addEventListener('resize',resize);const animate=()=>{requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)};animate();
+}catch(error){message.textContent='Erro ao abrir jogo: '+error.message;message.style.color='#ffb4b4'}

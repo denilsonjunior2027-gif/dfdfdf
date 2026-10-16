@@ -1,0 +1,840 @@
+
+import * as THREE from '/vendor/three/build/three.module.js';
+import { OrbitControls } from '/vendor/three/examples/jsm/controls/OrbitControls.js';
+
+'use strict';
+
+// ============================================================
+// BLOCKWORLD - JOGO 3D E MULTIPLAYER PUBLICO
+// Limite: 20 jogadores por partida
+// ============================================================
+
+const message = document.getElementById('message');
+const viewport = document.getElementById('viewport');
+
+const gameId = location.pathname.split('/').filter(Boolean).pop();
+
+const MAX_PLAYERS = 20;
+const MOVE_SPEED = 5;
+const MOVE_INTERVAL = 0.07;
+
+const colors = {
+  skin: '#d9a078',
+  hair: '#38251c',
+  shirt: '#635bdb',
+  pants: '#27344d'
+};
+
+let socket = null;
+let myId = null;
+let roomCode = '';
+let scene = null;
+let camera = null;
+let renderer = null;
+let controls = null;
+let myPlayer = null;
+
+let moveTimer = 0;
+let animationStarted = false;
+let connecting = false;
+
+const players = new Map();
+const keys = new Set();
+const clock = new THREE.Clock();
+
+if (!message || !viewport) {
+  throw new Error(
+    'A página do jogo precisa conter os elementos #message e #viewport.'
+  );
+}
+
+// ============================================================
+// PAINEL MULTIPLAYER
+// ============================================================
+
+const panel = document.createElement('section');
+panel.id = 'bwMultiplayerPanel';
+
+panel.style.cssText = [
+  'margin:12px',
+  'padding:14px',
+  'background:#11192b',
+  'border:1px solid #26334c',
+  'border-radius:14px',
+  'color:#eef2ff',
+  'font:14px system-ui',
+  'display:flex',
+  'gap:12px',
+  'flex-wrap:wrap',
+  'align-items:center'
+].join(';');
+
+panel.innerHTML = `
+  <strong>Multiplayer público</strong>
+  <button id="bwFindMatch" type="button">Encontrar partida</button>
+  <button id="bwLeave" type="button">Sair da partida</button>
+  <span id="bwRoomStatus">Preparando jogo...</span>
+
+  <div style="flex-basis:100%;height:1px;background:#26334c"></div>
+
+  <strong>Personalizar avatar</strong>
+  <label>Pele <input type="color" id="bwSkin" value="#d9a078"></label>
+  <label>Cabelo <input type="color" id="bwHair" value="#38251c"></label>
+  <label>Camisa <input type="color" id="bwShirt" value="#635bdb"></label>
+  <label>Calça <input type="color" id="bwPants" value="#27344d"></label>
+  <button id="bwSaveAvatar" type="button">Salvar avatar</button>
+
+  <span style="color:#9ca9c5">
+    WASD ou setas · Máximo de 20 jogadores.
+  </span>
+`;
+
+panel.querySelectorAll('button').forEach(button => {
+  button.style.cssText = [
+    'background:#635bdb',
+    'color:white',
+    'border:0',
+    'border-radius:8px',
+    'padding:9px 12px',
+    'cursor:pointer'
+  ].join(';');
+});
+
+panel.querySelectorAll('input').forEach(input => {
+  input.style.cssText = [
+    'background:#080d18',
+    'border:1px solid #394662',
+    'border-radius:6px',
+    'padding:4px'
+  ].join(';');
+});
+
+viewport.parentNode.insertBefore(panel, viewport);
+
+const roomStatus = document.getElementById('bwRoomStatus');
+
+function status(text, bad = false) {
+  roomStatus.textContent = text;
+  roomStatus.style.color = bad ? '#ff9999' : '#a9e8bf';
+}
+
+function setMessage(text, bad = false) {
+  message.textContent = text;
+  message.style.color = bad ? '#ffb4b4' : '';
+}
+
+function readColors() {
+  for (const key of Object.keys(colors)) {
+    const id = 'bw' + key[0].toUpperCase() + key.slice(1);
+    const input = document.getElementById(id);
+
+    if (input && /^#[0-9a-f]{6}$/i.test(input.value)) {
+      colors[key] = input.value;
+    }
+  }
+
+  return { ...colors };
+}
+
+function updateColorInputs(avatar) {
+  if (!avatar || typeof avatar !== 'object') return;
+
+  for (const key of Object.keys(colors)) {
+    const value = avatar[key];
+
+    if (!/^#[0-9a-f]{6}$/i.test(value || '')) continue;
+
+    colors[key] = value;
+
+    const id = 'bw' + key[0].toUpperCase() + key.slice(1);
+    const input = document.getElementById(id);
+
+    if (input) input.value = value;
+  }
+}
+
+for (const key of Object.keys(colors)) {
+  const id = 'bw' + key[0].toUpperCase() + key.slice(1);
+  const input = document.getElementById(id);
+
+  input.addEventListener('input', () => {
+    readColors();
+
+    if (myPlayer) {
+      applyAvatar(myPlayer, colors);
+    }
+  });
+}
+
+// ============================================================
+// AVATAR 3D
+// ============================================================
+
+function makeLabel(username) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'rgba(8,13,24,0.82)';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, 496, 112, 22);
+  ctx.fill();
+
+  ctx.font = 'bold 38px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+
+  ctx.fillText(
+    String(username || 'Jogador').slice(0, 24),
+    256,
+    64
+  );
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false
+  });
+
+  const sprite = new THREE.Sprite(material);
+
+  sprite.scale.set(2.5, 0.62, 1);
+  sprite.position.y = 2.8;
+
+  return sprite;
+}
+
+function buildAvatar(player) {
+  const group = new THREE.Group();
+
+  const materials = {
+    skin: new THREE.MeshStandardMaterial({ color: colors.skin }),
+    hair: new THREE.MeshStandardMaterial({ color: colors.hair }),
+    shirt: new THREE.MeshStandardMaterial({ color: colors.shirt }),
+    pants: new THREE.MeshStandardMaterial({ color: colors.pants })
+  };
+
+  function addBox(width, height, depth, material, x, y, z) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, depth),
+      material
+    );
+
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    group.add(mesh);
+    return mesh;
+  }
+
+  addBox(0.8, 0.9, 0.4, materials.shirt, 0, 1.25, 0);
+  addBox(0.58, 0.58, 0.58, materials.skin, 0, 2.02, 0);
+  addBox(0.62, 0.2, 0.62, materials.hair, 0, 2.38, 0);
+
+  for (const x of [-0.23, 0.23]) {
+    addBox(0.3, 0.7, 0.34, materials.pants, x, 0.4, 0);
+  }
+
+  const label = makeLabel(player.username);
+
+  group.add(label);
+
+  group.userData.materials = materials;
+  group.userData.label = label;
+  group.userData.playerId = player.id;
+
+  applyAvatar(group, player.avatar || colors);
+
+  return group;
+}
+
+function applyAvatar(group, avatar) {
+  if (!group || !group.userData.materials) return;
+
+  const mats = group.userData.materials;
+
+  const mapping = [
+    ['skin', mats.skin],
+    ['hair', mats.hair],
+    ['shirt', mats.shirt],
+    ['pants', mats.pants]
+  ];
+
+  for (const [key, material] of mapping) {
+    const value = avatar && avatar[key];
+
+    if (/^#[0-9a-f]{6}$/i.test(value || '')) {
+      material.color.set(value);
+    }
+  }
+}
+
+function upsertPlayer(player) {
+  if (!scene || !player || !player.id) return;
+
+  let group = players.get(player.id);
+
+  if (!group) {
+    group = buildAvatar(player);
+    scene.add(group);
+    players.set(player.id, group);
+  }
+
+  group.position.set(
+    Number.isFinite(player.x) ? player.x : 0,
+    0,
+    Number.isFinite(player.z) ? player.z : 0
+  );
+
+  group.rotation.y = Number.isFinite(player.rotation)
+    ? player.rotation
+    : 0;
+
+  applyAvatar(group, player.avatar || colors);
+
+  if (player.id === myId) {
+    myPlayer = group;
+  }
+}
+
+function removePlayer(id) {
+  const group = players.get(id);
+
+  if (!group) return;
+
+  scene.remove(group);
+
+  group.traverse(item => {
+    if (item.geometry) item.geometry.dispose();
+
+    if (item.material) {
+      const materials = Array.isArray(item.material)
+        ? item.material
+        : [item.material];
+
+      for (const material of materials) {
+        if (material.map) material.map.dispose();
+        material.dispose();
+      }
+    }
+  });
+
+  players.delete(id);
+
+  if (id === myId) {
+    myPlayer = null;
+  }
+}
+
+function clearRoom() {
+  for (const id of [...players.keys()]) {
+    removePlayer(id);
+  }
+
+  roomCode = '';
+  myPlayer = null;
+  status('Sem partida');
+}
+
+// ============================================================
+// SOCKET.IO E PARTIDAS PUBLICAS
+// ============================================================
+
+function ensureSocket() {
+  if (socket) {
+    if (socket.connected) {
+      socket.emit('findMatch', { gameId });
+      return;
+    }
+
+    if (!connecting) {
+      connecting = true;
+      socket.connect();
+    }
+
+    return;
+  }
+
+  if (typeof window.io !== 'function') {
+    status('Socket.IO não carregou. Atualize a página.', true);
+    return;
+  }
+
+  connecting = true;
+  status('Conectando ao servidor...');
+
+  socket = window.io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    timeout: 10000
+  });
+
+  socket.on('connect', () => {
+    connecting = false;
+    myId = socket.id;
+
+    status('Conectado. Procurando partida...');
+
+    socket.emit('findMatch', { gameId });
+  });
+
+  socket.on('connect_error', error => {
+    connecting = false;
+
+    status(
+      error && error.message
+        ? error.message
+        : 'Não foi possível conectar. Entre na sua conta.',
+      true
+    );
+  });
+
+  socket.on('roomError', error => {
+    status(String(error || 'Não foi possível entrar na partida.'), true);
+  });
+
+  socket.on('roomJoined', data => {
+    if (!data || !Array.isArray(data.players)) {
+      status('O servidor retornou dados inválidos.', true);
+      return;
+    }
+
+    clearRoom();
+
+    roomCode = data.room && data.room.code
+      ? String(data.room.code)
+      : '';
+
+    myId = socket.id;
+
+    for (const player of data.players) {
+      upsertPlayer(player);
+    }
+
+    const ownPlayer = data.players.find(player => player.id === myId);
+
+    if (ownPlayer && ownPlayer.avatar) {
+      updateColorInputs(ownPlayer.avatar);
+    }
+
+    status(
+      'Partida pública · ' +
+      data.players.length +
+      '/' +
+      MAX_PLAYERS +
+      ' jogadores'
+    );
+  });
+
+  socket.on('playerJoined', player => {
+    upsertPlayer(player);
+  });
+
+  socket.on('playerUpdated', player => {
+    upsertPlayer(player);
+  });
+
+  socket.on('playerMoved3d', player => {
+    if (!player || !player.id) return;
+
+    const group = players.get(player.id);
+
+    if (!group) return;
+
+    if (Number.isFinite(player.x) && Number.isFinite(player.z)) {
+      group.position.x = player.x;
+      group.position.z = player.z;
+    }
+
+    if (Number.isFinite(player.rotation)) {
+      group.rotation.y = player.rotation;
+    }
+  });
+
+  socket.on('playerLeft', id => {
+    removePlayer(typeof id === 'object' ? id.id : id);
+  });
+
+  socket.on('roomInfo', data => {
+    if (!data) return;
+
+    const count = Number.isFinite(data.count) ? data.count : players.size;
+
+    status(
+      'Partida pública · ' +
+      count +
+      '/' +
+      MAX_PLAYERS +
+      ' jogadores'
+    );
+  });
+
+  socket.on('roomClosed', data => {
+    if (!data || !roomCode || roomCode === data.code) {
+      clearRoom();
+      status('A partida foi encerrada. Procurando outra...');
+    }
+  });
+
+  socket.on('avatarSaved', avatar => {
+    updateColorInputs(avatar);
+
+    if (myPlayer) {
+      applyAvatar(myPlayer, avatar);
+    }
+
+    status('Avatar salvo na sua conta!');
+  });
+
+  socket.on('disconnect', () => {
+    connecting = false;
+    clearRoom();
+    status('Desconectado. Tentando reconectar...', true);
+  });
+}
+
+document.getElementById('bwFindMatch').addEventListener('click', () => {
+  if (!gameId) {
+    status('Identificador do jogo inválido.', true);
+    return;
+  }
+
+  if (socket && socket.connected) {
+    status('Procurando partida...');
+    socket.emit('findMatch', { gameId });
+  } else {
+    ensureSocket();
+  }
+});
+
+document.getElementById('bwLeave').addEventListener('click', () => {
+  if (socket && socket.connected) {
+    socket.emit('leaveRoom');
+  }
+
+  clearRoom();
+  status('Você saiu da partida.');
+});
+
+document.getElementById('bwSaveAvatar').addEventListener('click', () => {
+  const avatar = readColors();
+
+  if (!socket || !socket.connected) {
+    status('Conectando para salvar o avatar...', true);
+    ensureSocket();
+    return;
+  }
+
+  socket.emit('setAvatar', avatar);
+});
+
+// ============================================================
+// CONTROLES
+// ============================================================
+
+const movementKeys = new Set([
+  'w', 'a', 's', 'd',
+  'arrowup', 'arrowdown', 'arrowleft', 'arrowright'
+]);
+
+window.addEventListener('keydown', event => {
+  const tag = document.activeElement?.tagName;
+
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  const key = event.key.toLowerCase();
+
+  if (movementKeys.has(key)) {
+    keys.add(key);
+    event.preventDefault();
+  }
+});
+
+window.addEventListener('keyup', event => {
+  keys.delete(event.key.toLowerCase());
+});
+
+window.addEventListener('blur', () => {
+  keys.clear();
+});
+
+// ============================================================
+// CARREGAMENTO DA CENA 3D
+// ============================================================
+
+async function loadScene() {
+  const response = await fetch(
+    '/api/scenes/' + encodeURIComponent(gameId)
+  );
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('O servidor retornou uma resposta inválida.');
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Não foi possível carregar a cena.');
+  }
+
+  if (!Array.isArray(data.objects)) {
+    data.objects = [];
+  }
+
+  return data;
+}
+
+function createWorld(data) {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color('#10182a');
+
+  scene.add(
+    new THREE.HemisphereLight(0xffffff, 0x526080, 2)
+  );
+
+  const light = new THREE.DirectionalLight(0xffffff, 2.4);
+  light.position.set(8, 12, 7);
+  scene.add(light);
+
+  const grid = new THREE.GridHelper(
+    100,
+    100,
+    0x53648a,
+    0x26344f
+  );
+
+  scene.add(grid);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(1000, 1000),
+    new THREE.MeshStandardMaterial({
+      color: '#141e30',
+      side: THREE.DoubleSide
+    })
+  );
+
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.03;
+  floor.name = 'BlockWorldFloor';
+
+  scene.add(floor);
+
+  for (const object of data.objects) {
+    if (!object || !Array.isArray(object.position)) continue;
+
+    let geometry;
+
+    switch (object.type) {
+      case 'Box':
+        geometry = new THREE.BoxGeometry(1, 1, 1);
+        break;
+
+      case 'Sphere':
+        geometry = new THREE.SphereGeometry(0.5, 24, 16);
+        break;
+
+      case 'Plane':
+        geometry = new THREE.PlaneGeometry(1, 1);
+        break;
+
+      case 'Cylinder':
+        geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+        break;
+
+      default:
+        continue;
+    }
+
+    const material = new THREE.MeshStandardMaterial({
+      color: object.color || '#8b8bff',
+      roughness: 0.75,
+      side: object.type === 'Plane'
+        ? THREE.DoubleSide
+        : THREE.FrontSide
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+
+    mesh.name = object.name || object.type;
+
+    mesh.position.fromArray(object.position);
+
+    if (Array.isArray(object.rotation)) {
+      mesh.rotation.set(
+        Number(object.rotation[0]) || 0,
+        Number(object.rotation[1]) || 0,
+        Number(object.rotation[2]) || 0
+      );
+    }
+
+    if (Array.isArray(object.scale)) {
+      mesh.scale.fromArray(object.scale);
+    }
+
+    if (object.type === 'Plane') {
+      mesh.rotation.x -= Math.PI / 2;
+    }
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    scene.add(mesh);
+  }
+
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(
+    Math.max(1, viewport.clientWidth),
+    Math.max(1, viewport.clientHeight)
+  );
+
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  viewport.appendChild(renderer.domElement);
+
+  camera = new THREE.PerspectiveCamera(
+    60,
+    Math.max(1, viewport.clientWidth) /
+      Math.max(1, viewport.clientHeight),
+    0.1,
+    2000
+  );
+
+  camera.position.set(12, 10, 14);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1, 0);
+  controls.update();
+
+  window.addEventListener('resize', resizeRenderer);
+}
+
+function resizeRenderer() {
+  if (!renderer || !camera || !viewport) return;
+
+  const width = Math.max(1, viewport.clientWidth);
+  const height = Math.max(1, viewport.clientHeight);
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(width, height);
+}
+
+// ============================================================
+// LOOP 3D E SINCRONIZACAO DE MOVIMENTO
+// ============================================================
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (!renderer || !scene || !camera) return;
+
+  const delta = Math.min(clock.getDelta(), 0.05);
+
+  if (myPlayer && roomCode) {
+    let dx = 0;
+    let dz = 0;
+
+    if (keys.has('w') || keys.has('arrowup')) dz -= 1;
+    if (keys.has('s') || keys.has('arrowdown')) dz += 1;
+    if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
+    if (keys.has('d') || keys.has('arrowright')) dx += 1;
+
+    if (dx !== 0 || dz !== 0) {
+      const length = Math.hypot(dx, dz);
+
+      dx /= length;
+      dz /= length;
+
+      myPlayer.position.x = THREE.MathUtils.clamp(
+        myPlayer.position.x + dx * MOVE_SPEED * delta,
+        -500,
+        500
+      );
+
+      myPlayer.position.z = THREE.MathUtils.clamp(
+        myPlayer.position.z + dz * MOVE_SPEED * delta,
+        -500,
+        500
+      );
+
+      myPlayer.rotation.y = Math.atan2(dx, dz);
+
+      moveTimer += delta;
+
+      if (
+        moveTimer >= MOVE_INTERVAL &&
+        socket &&
+        socket.connected
+      ) {
+        moveTimer = 0;
+
+        socket.emit('move3d', {
+          x: myPlayer.position.x,
+          z: myPlayer.position.z,
+          rotation: myPlayer.rotation.y
+        });
+      }
+    }
+  }
+
+  if (controls) controls.update();
+
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// INICIALIZACAO
+// ============================================================
+
+async function main() {
+  try {
+    if (!gameId || gameId === 'play') {
+      throw new Error('Abra um jogo publicado com um identificador válido.');
+    }
+
+    status('Carregando jogo 3D...');
+
+    const data = await loadScene();
+
+    createWorld(data);
+
+    setMessage(
+      'Cena publicada · ' + data.objects.length + ' objetos'
+    );
+
+    status('Cena carregada. Conectando ao multiplayer...');
+
+    if (!animationStarted) {
+      animationStarted = true;
+      animate();
+    }
+
+    ensureSocket();
+  } catch (error) {
+    console.error('[BlockWorld] Erro ao abrir jogo:', error);
+
+    setMessage(
+      'Erro ao abrir o jogo: ' +
+      (error && error.message ? error.message : 'erro desconhecido'),
+      true
+    );
+
+    status('Não foi possível carregar o jogo.', true);
+  }
+}
+
+main();

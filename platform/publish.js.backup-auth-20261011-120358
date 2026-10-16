@@ -1,0 +1,131 @@
+'use strict';
+const $ = id => document.getElementById(id);
+const statusBox = $('status');
+const storedSceneKey = 'bw_engine_scene';
+let engineScene = null;
+
+function status(message) {
+  statusBox.textContent = message;
+}
+
+async function api(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {})
+    }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'Erro HTTP ' + response.status);
+  return data;
+}
+
+function readEngineScene() {
+  try {
+    const raw = localStorage.getItem(storedSceneKey);
+    if (!raw) return null;
+    const scene = JSON.parse(raw);
+    if (!scene || !Array.isArray(scene.objects) || scene.objects.length < 1 || scene.objects.length > 500) {
+      throw new Error('A cena enviada pela Engine não é válida.');
+    }
+    return scene;
+  } catch (error) {
+    status('Não foi possível ler a cena da Engine: ' + error.message);
+    return null;
+  }
+}
+
+(async () => {
+  engineScene = readEngineScene();
+
+  try {
+    const { user } = await api('/api/me');
+    if (!user) {
+      $('account').textContent = 'Entre na sua conta da BlockWorld para publicar. ';
+      const link = document.createElement('a');
+      link.href = '/';
+      link.textContent = 'Abrir a plataforma e entrar';
+      link.style.color = '#bdb5ff';
+      $('account').appendChild(link);
+      status('Faça login nesta janela. Depois volte à página de publicação.');
+      $('publishForm').classList.remove('hidden');
+    } else {
+      $('account').textContent = 'Conectado como ' + user.username;
+      $('publishForm').classList.remove('hidden');
+      status(engineScene
+        ? 'Cena recebida da Engine. Preencha os dados e publique seu jogo.'
+        : 'Escolha um arquivo JSON de cena e preencha os dados do jogo.');
+    }
+  } catch (error) {
+    status('Não consegui conectar ao servidor: ' + error.message);
+  }
+
+  if (engineScene) {
+    const file = $('sceneFile');
+    file.required = false;
+    const label = document.querySelector('label[for="sceneFile"]');
+    if (label) label.style.display = 'none';
+    file.style.display = 'none';
+    const container = file.parentElement;
+    if (container) container.style.display = 'none';
+    const help = document.querySelector('.help');
+    if (help) help.textContent = 'Cena enviada diretamente pela BlockWorld Engine.';
+  }
+})();
+
+$('publishForm').addEventListener('submit', async event => {
+  event.preventDefault();
+
+  let scene = engineScene;
+  const file = $('sceneFile').files[0];
+
+  try {
+    if (!scene) {
+      if (!file) {
+        status('Escolha um arquivo JSON de cena.');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        status('O arquivo é maior que 2 MB.');
+        return;
+      }
+      scene = JSON.parse(await file.text());
+    }
+
+    const button = $('publishButton');
+    button.disabled = true;
+
+    try {
+      const result = await api('/api/publish-scene', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: $('title').value,
+          description: $('description').value,
+          category: $('category').value,
+          scene
+        })
+      });
+
+      localStorage.removeItem(storedSceneKey);
+      engineScene = null;
+      status('Jogo publicado com sucesso!\\n\\nLink para jogar: ' + location.origin + result.game.playUrl);
+
+      const link = document.createElement('a');
+      link.href = result.game.playUrl;
+      link.textContent = 'Abrir jogo publicado';
+      link.className = 'button';
+      link.style.marginTop = '12px';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      statusBox.appendChild(document.createElement('br'));
+      statusBox.appendChild(link);
+    } finally {
+      button.disabled = false;
+    }
+  } catch (error) {
+    status('Não foi possível publicar: ' + error.message);
+  }
+});
